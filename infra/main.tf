@@ -45,6 +45,16 @@ locals {
     if try(manifest.kind, "") == "Namespace"
   }
 
+  otel_foundation_manifests = {
+    for key, manifest in local.manifest_objects :
+    key => data.kubectl_path_documents.manifests.manifests[key]
+    if try(manifest.metadata.labels["app.kubernetes.io/part-of"], "") == "opentelemetry" &&
+    contains(
+      ["ServiceAccount", "ClusterRole", "ClusterRoleBinding"],
+      try(manifest.kind, "")
+    )
+  }
+
   metrics_foundation_manifests = {
     for key, manifest in local.manifest_objects :
     key => data.kubectl_path_documents.manifests.manifests[key]
@@ -106,8 +116,23 @@ locals {
     try(manifest.kind, "") == "HorizontalPodAutoscaler"
   }
 
+  otel_collector_manifests = {
+    for key, manifest in local.manifest_objects :
+    key => data.kubectl_path_documents.manifests.manifests[key]
+    if try(manifest.metadata.namespace, "") == var.namespace &&
+    try(manifest.kind, "") == "OpenTelemetryCollector"
+  }
+
+  otel_instrumentation_manifests = {
+    for key, manifest in local.manifest_objects :
+    key => data.kubectl_path_documents.manifests.manifests[key]
+    if try(manifest.metadata.namespace, "") == var.namespace &&
+    try(manifest.kind, "") == "Instrumentation"
+  }
+
   classified_manifest_keys = concat(
     keys(local.namespace_manifests),
+    keys(local.otel_foundation_manifests),
     keys(local.metrics_foundation_manifests),
     keys(local.metrics_workload_manifests),
     keys(local.metrics_api_service_manifests),
@@ -116,6 +141,8 @@ locals {
     keys(local.api_foundation_manifests),
     keys(local.api_workload_manifests),
     keys(local.api_hpa_manifests),
+    keys(local.otel_collector_manifests),
+    keys(local.otel_instrumentation_manifests),
   )
 }
 
@@ -135,6 +162,15 @@ resource "kubectl_manifest" "namespace" {
   yaml_body = each.value
 
   depends_on = [kind_cluster.ci_cluster]
+}
+
+resource "kubectl_manifest" "otel_foundation" {
+  for_each  = local.otel_foundation_manifests
+  yaml_body = each.value
+
+  depends_on = [
+    kubectl_manifest.namespace,
+  ]
 }
 
 resource "kubectl_manifest" "metrics_foundation" {
@@ -197,6 +233,26 @@ resource "kubectl_manifest" "api_secret" {
   depends_on = [kubectl_manifest.namespace]
 }
 
+resource "kubectl_manifest" "datadog_secret" {
+  yaml_body = yamlencode({
+    apiVersion = "v1"
+    kind       = "Secret"
+
+    metadata = {
+      name      = "otel-datadog-secret"
+      namespace = var.namespace
+    }
+
+    type = "Opaque"
+
+    data = {
+      DD_API_KEY = base64encode(var.datadog_api_key)
+    }
+  })
+
+  depends_on = [kubectl_manifest.namespace]
+}
+
 resource "kubectl_manifest" "postgres_foundation" {
   for_each  = local.postgres_foundation_manifests
   yaml_body = each.value
@@ -230,7 +286,11 @@ resource "kubectl_manifest" "api_workload" {
   yaml_body        = each.value
   wait_for_rollout = true
 
-  depends_on = [kubectl_manifest.api_foundation]
+  depends_on = [
+    kubectl_manifest.api_foundation,
+    kubectl_manifest.otel_collector,
+    kubectl_manifest.otel_instrumentation,
+  ]
 }
 
 resource "kubectl_manifest" "api_hpa" {
@@ -240,5 +300,71 @@ resource "kubectl_manifest" "api_hpa" {
   depends_on = [
     kubectl_manifest.api_workload,
     kubectl_manifest.metrics_api_service,
+  ]
+}
+
+resource "helm_release" "opentelemetry_operator" {
+  name             = "opentelemetry-operator"
+  namespace        = "opentelemetry-system"
+  create_namespace = true
+
+  repository = "https://open-telemetry.github.io/opentelemetry-helm-charts"
+  chart      = "opentelemetry-operator"
+  version    = "0.114.0"
+
+  atomic          = true
+  cleanup_on_fail = true
+  wait            = true
+  wait_for_jobs   = true
+  timeout         = 300
+
+  values = [
+    yamlencode({
+      crds = {
+        create = true
+      }
+
+      manager = {
+        collectorImage = {
+          repository = "otel/opentelemetry-collector-contrib"
+        }
+      }
+
+      admissionWebhooks = {
+        certManager = {
+          enabled = false
+        }
+
+        autoGenerateCert = {
+          enabled = true
+        }
+      }
+    })
+  ]
+
+  depends_on = [kind_cluster.ci_cluster]
+}
+
+resource "kubectl_manifest" "otel_collector" {
+  for_each        = local.otel_collector_manifests
+  yaml_body       = each.value
+  validate_schema = false
+
+  depends_on = [
+    helm_release.opentelemetry_operator,
+    kubectl_manifest.namespace,
+    kubectl_manifest.datadog_secret,
+    kubectl_manifest.otel_foundation,
+  ]
+}
+
+resource "kubectl_manifest" "otel_instrumentation" {
+  for_each        = local.otel_instrumentation_manifests
+  yaml_body       = each.value
+  validate_schema = false
+
+  depends_on = [
+    helm_release.opentelemetry_operator,
+    kubectl_manifest.otel_collector,
   ]
 }

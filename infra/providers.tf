@@ -11,6 +11,11 @@ terraform {
       source  = "gavinbunney/kubectl"
       version = "1.19.0"
     }
+
+    helm = {
+      source  = "hashicorp/helm"
+      version = "3.0.2"
+    }
   }
 }
 
@@ -22,4 +27,13 @@ provider "kubectl" {
   client_key             = kind_cluster.ci_cluster.client_key
   cluster_ca_certificate = kind_cluster.ci_cluster.cluster_ca_certificate
   load_config_file       = false
+}
+
+provider "helm" {
+  kubernetes = {
+    host                   = kind_cluster.ci_cluster.endpoint
+    client_certificate     = kind_cluster.ci_cluster.client_certificate
+    client_key             = kind_cluster.ci_cluster.client_key
+    cluster_ca_certificate = kind_cluster.ci_cluster.cluster_ca_certificate
+  }
 }

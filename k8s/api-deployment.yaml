@@ -12,9 +12,15 @@ spec:
     metadata:
       labels:
         app: mecanica-api
+      annotations:
+        # Instrução para o Operator injetar o agente Java automaticamente
+        instrumentation.opentelemetry.io/inject-java: "java-instrumentation"
     spec:
       securityContext:
         runAsNonRoot: true
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: mecanica-api
           image: ${api_image}
@@ -54,8 +60,8 @@ spec:
               cpu: "250m"
               memory: "512Mi"
             limits:
-              cpu: "500m"
-              memory: "768Mi"
+              cpu: "1000m"
+              memory: "1024Mi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

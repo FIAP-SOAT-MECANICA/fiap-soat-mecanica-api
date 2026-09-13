@@ -1,0 +1,40 @@
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: java-instrumentation
+  namespace: ${namespace}
+spec:
+  initContainerSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+  exporter:
+    endpoint: http://otel-daemonset-collector.${namespace}.svc.cluster.local:4318
+  propagators:
+    - tracecontext
+    - baggage
+  java:
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.31.1
+    env:
+      # Boas práticas para o mapeamento e tags unificadas no Datadog
+      - name: OTEL_METRICS_EXPORTER
+        value: "otlp"
+      - name: OTEL_LOGS_EXPORTER
+        value: "otlp"
+
+      - name: DD_SERVICE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.labels['app']
+
+      # ATRIBUIÇÃO AO RECURSO OPENTELEMETRY
+      # O Datadog Collector traduzirá 'service.name', 'deployment.environment' e 'service.version'
+      # automaticamente para 'service', 'env' e 'version' no seu painel.
+      - name: OTEL_RESOURCE_ATTRIBUTES
+        value: "service.name=$(DD_SERVICE),deployment.environment=local,service.version=1.0.0"

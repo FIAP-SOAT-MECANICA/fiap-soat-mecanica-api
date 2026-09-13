@@ -1,0 +1,110 @@
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-daemonset
+  namespace: ${namespace}
+spec:
+  mode: daemonset # Garante uma réplica por nó da infraestrutura
+  image: otel/opentelemetry-collector-contrib:0.152.0
+  serviceAccount: otel-collector
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Adiciona os privilégios necessários para ler o sistema de arquivos do Host
+  securityContext:
+    runAsUser: 0 # Executa como root para conseguir coletar as métricas de infraestrutura
+    runAsGroup: 0
+    seccompProfile:
+      type: RuntimeDefault
+      
+  env:
+    - name: DD_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: otel-datadog-secret
+          key: DD_API_KEY
+
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+      # ATIVAÇÃO: Coleta métricas de CPU e Memória do nó hospedeiro
+      hostmetrics:
+        root_path: /hostfs # Aponta para o volume montado abaixo
+        collection_interval: 10s
+        scrapers:
+          cpu: {}
+          memory: {}
+          disk: {}
+          filesystem: {}
+          network: {}
+          load: {}
+
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 75
+        spike_limit_percentage: 15
+      batch:
+        send_batch_size: 8192
+        timeout: 5s
+        
+      # Vincula as métricas do nó e da app de forma unificada no Datadog
+      k8sattributes:
+        extract:
+          metadata:
+            - k8s.pod.name
+            - k8s.pod.uid
+            - k8s.deployment.name
+            - k8s.namespace.name
+            - k8s.node.name
+        passthrough: false
+
+      # Adiciona metadados do host para correlacionar APM e Infraestrutura no Datadog
+      resourcedetection:
+        detectors: [system]
+        system:
+          hostname_sources: ["os"]
+
+    exporters:
+      datadog:
+        api:
+          key: $${env:DD_API_KEY}
+          site: datadoghq.com
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes, batch]
+          exporters: [datadog]
+        metrics:
+          # ADICIONADO: O pipeline de métricas agora recebe tanto os dados do Java (otlp) quanto os do Host (hostmetrics)
+          receivers: [otlp, hostmetrics]
+          processors: [memory_limiter, resourcedetection, k8sattributes, batch]
+          exporters: [datadog]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes, batch]
+          exporters: [datadog]
+
+  # Mapeia as pastas físicas do nó para dentro do container do OpenTelemetry
+  volumeMounts:
+    - name: hostfs
+      mountPath: /hostfs
+      readOnly: true
+      mountPropagation: HostToContainer
+  volumes:
+    - name: hostfs
+      hostPath:
+        path: /
