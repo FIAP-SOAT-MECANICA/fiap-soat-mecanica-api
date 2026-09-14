@@ -4,4 +4,8 @@ metadata:
   name: mecanica-api-config
   namespace: ${namespace}
 data:
+<<<<<<< Updated upstream
   SPRING_DATASOURCE_URL: "jdbc:postgresql://mecanica-db:5432/${db_name}"
+=======
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://<ENDPOINT_RDS>:5432/mecanica"
+>>>>>>> Stashed changes

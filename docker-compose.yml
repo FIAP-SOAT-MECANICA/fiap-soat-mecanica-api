@@ -21,12 +21,10 @@ services:
   app:
     build: .
     container_name: mecanica-api
-    depends_on:
-      postgres:
-        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
+<<<<<<< Updated upstream
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-mecanica}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
@@ -44,6 +42,9 @@ services:
     ports:
       - "1025:1025"
       - "8025:8025"
+=======
+      JWT_SECRET: Ie+o8U7OfpdBdhHUp9mQ+U/8ayI20O2Tp1+35tR2jabK4n2w4BreTofRsQDqzl9aUVpt2nu0azdv3tPWZkROZA==
+>>>>>>> Stashed changes
 
   sonarqube-db:
     image: postgres:17
@@ -56,6 +57,7 @@ services:
       - sonarqube_db_data:/var/lib/postgresql/data
 
   sonarqube:
+<<<<<<< Updated upstream
      image: sonarqube:community
      container_name: sonarqube
      depends_on:
@@ -70,9 +72,24 @@ services:
        - sonarqube_data:/opt/sonarqube/data
        - sonarqube_extensions:/opt/sonarqube/extensions
        - sonarqube_logs:/opt/sonarqube/logs
+=======
+    image: sonarqube:community
+    container_name: sonarqube
+    depends_on:
+      - sonarqube-db
+    ports:
+      - "9000:9000"
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://sonarqube-db:5432/sonarqube
+      SONAR_JDBC_USERNAME: sonarqube
+      SONAR_JDBC_PASSWORD: sonarqube
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+>>>>>>> Stashed changes
 
 volumes:
-  postgres_data:
   sonarqube_db_data:
   sonarqube_data:
   sonarqube_extensions:

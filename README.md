@@ -485,6 +485,7 @@ terraform plan -out=local.tfplan
 terraform apply local.tfplan
 ```
 
+<<<<<<< Updated upstream
 `api_image` deve apontar para uma imagem publica e imutavel no formato
 `ghcr.io/<owner>/<repo>:<commit_sha>`. Os valores `db_password` e `jwt_secret`
 sao sensiveis; o Terraform gera os objetos `Secret` sem manter valores reais
@@ -504,15 +505,70 @@ curl http://localhost:8080/actuator/health/readiness
 ```
 
 Finalize o ambiente explicitamente:
+=======
+2.Aguardar o pod do banco ficar pronto:
+>>>>>>> Stashed changes
 
 ```bash
 terraform destroy
 ```
 
+<<<<<<< Updated upstream
 O destroy remove o cluster e o PVC interno; portanto, os dados do PostgreSQL
 sao perdidos. Localmente, o cluster pode ficar ativo ate esse comando. No
 GitHub Actions ele e efemero e o `destroy` roda sempre ao final. Consulte o
 guia detalhado em [`infra/README.md`](infra/README.md).
+=======
+3.Subir a API:
+
+```bash
+kubectl apply -f k8s/api-configmap.yaml -f k8s/api-secret.yaml -f k8s/api-deployment.yaml -f k8s/api-service.yaml -f k8s/api-hpa.yaml
+```
+
+4.Instalar o `metrics-server` (necessario para o HPA calcular uso de CPU/memória):
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+```
+
+> Em cluster local (Docker Desktop, minikube, kind), o `metrics-server` nao
+> confia por padrao no certificado do kubelet. Baixe o `components.yaml`,
+> adicione o argumento `--kubelet-insecure-tls` na lista de `args` do
+> Deployment `metrics-server`, e aplique o arquivo local em vez da URL.
+
+### Acessando a API
+
+Com o Service da API como `type: LoadBalancer`, o Docker Desktop expõe a
+porta diretamente em:
+
+```text
+http://localhost:8080
+```
+
+### Verificando o cluster
+
+```bash
+kubectl get pods
+kubectl get svc
+kubectl get hpa
+```
+
+O health check usado pelas probes (Spring Boot Actuator) tambem pode ser
+consultado diretamente:
+
+```text
+http://localhost:8080/actuator/health/readiness
+```
+
+### Sobre os Secrets versionados
+
+Os arquivos `postgres-secret.yaml` e `api-secret.yaml` estao versionados no
+repositorio com credenciais de desenvolvimento, para que qualquer pessoa
+consiga clonar o projeto e subir o ambiente sem passos extras. Em um cenario
+de producao, esses valores nao seriam commitados — seriam criados via
+`kubectl create secret` ou um gerenciador de segredos externo (Vault, AWS
+Secrets Manager, etc.), nunca versionados em texto no repositorio.
+>>>>>>> Stashed changes
 
 ## Swagger
 
