@@ -1,0 +1,188 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: cd-kind-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  docker:
+    name: Build and publish immutable image
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout the tested commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image tagged with the tested SHA
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}:${{ github.event.workflow_run.head_sha }}
+
+  deploy:
+    name: Provision, validate and destroy Kind
+    needs: docker
+    runs-on: ubuntu-latest
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_cluster_name: oficina-cluster
+      TF_VAR_namespace: mecanica
+      TF_VAR_api_image: ghcr.io/${{ github.repository }}:${{ github.event.workflow_run.head_sha }}
+      TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+      TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+      KUBECONFIG: ${{ github.workspace }}/infra/kubeconfig
+
+    steps:
+      - name: Checkout the tested commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.5
+          terraform_wrapper: false
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Check required secrets
+        shell: bash
+        run: |
+          test -n "$TF_VAR_db_password" || { echo "Missing GitHub secret DB_PASSWORD"; exit 1; }
+          test -n "$TF_VAR_jwt_secret" || { echo "Missing GitHub secret JWT_SECRET"; exit 1; }
+
+      - name: Verify that the GHCR image is public
+        shell: bash
+        run: |
+          docker logout ghcr.io || true
+          docker pull "$TF_VAR_api_image"
+
+      - name: Terraform format check
+        working-directory: infra
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init
+        id: terraform-init
+        working-directory: infra
+        run: terraform init -input=false
+
+      - name: Terraform validate
+        working-directory: infra
+        run: terraform validate
+
+      - name: Terraform plan
+        working-directory: infra
+        run: terraform plan -input=false -out=deploy.tfplan
+
+      - name: Terraform apply
+        working-directory: infra
+        run: terraform apply -input=false -auto-approve deploy.tfplan
+
+      - name: Validate cluster and workloads
+        shell: bash
+        run: |
+          kubectl cluster-info
+          kubectl wait --namespace "$TF_VAR_namespace" --for=condition=Ready pod --selector=app=mecanica-db --timeout=180s
+          kubectl rollout status deployment/mecanica-db --namespace "$TF_VAR_namespace" --timeout=180s
+          kubectl wait --namespace "$TF_VAR_namespace" --for=condition=Ready pod --selector=app=mecanica-api --timeout=240s
+          kubectl rollout status deployment/mecanica-api --namespace "$TF_VAR_namespace" --timeout=240s
+          kubectl wait --for=condition=Available apiservice/v1beta1.metrics.k8s.io --timeout=180s
+
+          for attempt in {1..18}; do
+            if kubectl top pods --namespace "$TF_VAR_namespace"; then
+              break
+            fi
+            if [[ "$attempt" == "18" ]]; then
+              kubectl describe deployment/metrics-server --namespace kube-system
+              exit 1
+            fi
+            sleep 10
+          done
+
+          for attempt in {1..18}; do
+            current_metrics="$(kubectl get hpa/mecanica-api-hpa --namespace "$TF_VAR_namespace" --output=jsonpath='{range .status.currentMetrics[*]}{.resource.current.averageUtilization}{" "}{end}')"
+            if [[ "$(wc -w <<< "$current_metrics")" -eq 2 ]]; then
+              break
+            fi
+            if [[ "$attempt" == "18" ]]; then
+              kubectl describe hpa/mecanica-api-hpa --namespace "$TF_VAR_namespace"
+              exit 1
+            fi
+            sleep 10
+          done
+
+          kubectl get pods,services,deployments,hpa --namespace "$TF_VAR_namespace" --output=wide
+          kubectl describe hpa/mecanica-api-hpa --namespace "$TF_VAR_namespace"
+
+          actual_image="$(kubectl get deployment/mecanica-api --namespace "$TF_VAR_namespace" --output=jsonpath='{.spec.template.spec.containers[0].image}')"
+          test "$actual_image" = "$TF_VAR_api_image"
+
+          pull_errors="$(kubectl get pods --namespace "$TF_VAR_namespace" --output=jsonpath='{range .items[*].status.containerStatuses[*]}{.state.waiting.reason}{"\n"}{end}')"
+          if grep -Eq "ImagePullBackOff|ErrImagePull" <<< "$pull_errors"; then
+            echo "A workload has an image pull error"
+            exit 1
+          fi
+
+      - name: Validate Flyway migrations and secret-safe logs
+        shell: bash
+        run: |
+          api_logs="$(kubectl logs deployment/mecanica-api --namespace "$TF_VAR_namespace" --all-pods=true --tail=1000)"
+          db_logs="$(kubectl logs deployment/mecanica-db --namespace "$TF_VAR_namespace" --tail=500)"
+
+          if [[ "$api_logs$db_logs" == *"$TF_VAR_db_password"* || "$api_logs$db_logs" == *"$TF_VAR_jwt_secret"* ]]; then
+            echo "A secret value was detected in workload logs"
+            exit 1
+          fi
+
+          grep -E "Flyway|Migrat|schema" <<< "$api_logs" || true
+          grep -Eq "Successfully (applied|validated) 9 migrations" <<< "$api_logs"
+          grep -Eiq 'version[^0-9]*(v)?9' <<< "$api_logs"
+
+      - name: Run API health check and smoke test
+        env:
+          API_BASE_URL: http://127.0.0.1:8080
+        shell: bash
+        run: |
+          curl --fail --retry 12 --retry-delay 5 --retry-all-errors \
+            "$API_BASE_URL/actuator/health/readiness"
+          node tests/api-smoke/api-smoke.mjs
+
+      - name: Terraform destroy
+        if: ${{ always() && steps.terraform-init.outcome == 'success' }}
+        working-directory: infra
+        run: terraform destroy -input=false -auto-approve
+
+      - name: Confirm that no Kind container remains
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          leftovers="$(docker ps --all --filter "name=${TF_VAR_cluster_name}" --format '{{.Names}}')"
+          if [[ -n "$leftovers" ]]; then
+            echo "Kind containers still present:"
+            echo "$leftovers"
+            exit 1
+          fi

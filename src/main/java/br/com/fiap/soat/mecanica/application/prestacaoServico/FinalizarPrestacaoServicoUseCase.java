@@ -1,5 +1,7 @@
 package br.com.fiap.soat.mecanica.application.prestacaoServico;
 
+import br.com.fiap.soat.mecanica.application.ordemServico.usecase.NotificarAlteracaoSituacaoOrdemServicoUseCase;
+import br.com.fiap.soat.mecanica.domain.enums.SituacaoOrdemServicoEnum;
 import br.com.fiap.soat.mecanica.domain.exception.RecursoNaoEncontradoException;
 import br.com.fiap.soat.mecanica.domain.exception.RegraNegocioException;
 import br.com.fiap.soat.mecanica.domain.ordemServico.OrdemServico;
@@ -19,6 +21,7 @@ public class FinalizarPrestacaoServicoUseCase {
 
     private final PrestacaoServicoRepository prestacaoServicoRepository;
     private final OrdemServicoRepository ordemServicoRepository;
+    private final NotificarAlteracaoSituacaoOrdemServicoUseCase notificarAlteracaoSituacaoOrdemServicoUseCase;
 
     @Transactional
     public PrestacaoServico executar(UUID id) {
@@ -47,8 +50,10 @@ public class FinalizarPrestacaoServicoUseCase {
                 && prestacoesAtivas.stream().allMatch(PrestacaoServico::isFinalizada);
 
         if (todasFinalizadas) {
+            SituacaoOrdemServicoEnum situacaoAnterior = os.getSituacao();
             os.finalizar();
-            ordemServicoRepository.salvar(os);
+            OrdemServico ordemServicoSalva = ordemServicoRepository.salvar(os);
+            notificarAlteracaoSituacaoOrdemServicoUseCase.executar(ordemServicoSalva, situacaoAnterior);
         }
 
         return psSalva;

@@ -2,6 +2,7 @@ package br.com.fiap.soat.mecanica.application.ordemServico.usecase;
 
 import br.com.fiap.soat.mecanica.domain.exception.RecursoNaoEncontradoException;
 import br.com.fiap.soat.mecanica.domain.exception.RegraNegocioException;
+import br.com.fiap.soat.mecanica.domain.enums.SituacaoOrdemServicoEnum;
 import br.com.fiap.soat.mecanica.domain.ordemServico.OrdemServico;
 import br.com.fiap.soat.mecanica.domain.ordemServico.OrdemServicoRepository;
 import br.com.fiap.soat.mecanica.domain.prestacaoServico.PrestacaoServico;
@@ -22,6 +23,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class IniciarExecucaoOrdemServicoUseCaseTest {
@@ -30,6 +33,8 @@ class IniciarExecucaoOrdemServicoUseCaseTest {
     private OrdemServicoRepository ordemServicoRepository;
     @Mock
     private PrestacaoServicoRepository prestacaoServicoRepository;
+    @Mock
+    private NotificarAlteracaoSituacaoOrdemServicoUseCase notificarAlteracaoSituacaoOrdemServicoUseCase;
     @InjectMocks
     private IniciarExecucaoOrdemServicoUseCase useCase;
 
@@ -49,6 +54,8 @@ class IniciarExecucaoOrdemServicoUseCaseTest {
 
         // Assert
         assertThat(resultado).isNotNull();
+        verify(notificarAlteracaoSituacaoOrdemServicoUseCase)
+                .executar(resultado, SituacaoOrdemServicoEnum.AGUARDANDO_APROVACAO);
     }
 
     @Test
@@ -70,5 +77,6 @@ class IniciarExecucaoOrdemServicoUseCaseTest {
         // Act & Assert
         assertThatThrownBy(() -> useCase.executar(os.getId()))
                 .isInstanceOf(RegraNegocioException.class);
+        verify(notificarAlteracaoSituacaoOrdemServicoUseCase, never()).executar(any(), any());
     }
 }

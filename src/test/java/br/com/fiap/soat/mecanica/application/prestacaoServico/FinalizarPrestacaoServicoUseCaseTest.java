@@ -2,6 +2,8 @@ package br.com.fiap.soat.mecanica.application.prestacaoServico;
 
 import br.com.fiap.soat.mecanica.domain.exception.RecursoNaoEncontradoException;
 import br.com.fiap.soat.mecanica.domain.exception.RegraNegocioException;
+import br.com.fiap.soat.mecanica.domain.enums.SituacaoOrdemServicoEnum;
+import br.com.fiap.soat.mecanica.application.ordemServico.usecase.NotificarAlteracaoSituacaoOrdemServicoUseCase;
 import br.com.fiap.soat.mecanica.domain.ordemServico.OrdemServico;
 import br.com.fiap.soat.mecanica.domain.ordemServico.OrdemServicoRepository;
 import br.com.fiap.soat.mecanica.domain.prestacaoServico.PrestacaoServico;
@@ -30,6 +32,8 @@ class FinalizarPrestacaoServicoUseCaseTest {
     private PrestacaoServicoRepository prestacaoServicoRepository;
     @Mock
     private OrdemServicoRepository ordemServicoRepository;
+    @Mock
+    private NotificarAlteracaoSituacaoOrdemServicoUseCase notificarAlteracaoSituacaoOrdemServicoUseCase;
     @InjectMocks
     private FinalizarPrestacaoServicoUseCase useCase;
 
@@ -51,6 +55,7 @@ class FinalizarPrestacaoServicoUseCaseTest {
         // Assert
         assertThat(resultado).isNotNull();
         verify(ordemServicoRepository, never()).salvar(any());
+        verifyNoInteractions(notificarAlteracaoSituacaoOrdemServicoUseCase);
     }
 
     @Test
@@ -73,6 +78,8 @@ class FinalizarPrestacaoServicoUseCaseTest {
         // Assert
         assertThat(resultado).isNotNull();
         verify(ordemServicoRepository).salvar(any());
+        verify(notificarAlteracaoSituacaoOrdemServicoUseCase)
+                .executar(os, SituacaoOrdemServicoEnum.EM_EXECUCAO);
     }
 
     @Test

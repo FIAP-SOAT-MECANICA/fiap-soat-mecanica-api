@@ -1,9 +1,16 @@
 package br.com.fiap.soat.mecanica.adapters.out.persistence.ordemServico;
 
 import br.com.fiap.soat.mecanica.adapters.out.persistence.ordemServico.mapper.OrdemServicoMapper;
+import br.com.fiap.soat.mecanica.application.ordemServico.ListarOrdensServicoAtivasPort;
+import br.com.fiap.soat.mecanica.application.ordemServico.dto.Pagina;
+import br.com.fiap.soat.mecanica.application.ordemServico.dto.Paginacao;
+import br.com.fiap.soat.mecanica.domain.enums.SituacaoOrdemServicoEnum;
+import br.com.fiap.soat.mecanica.domain.enums.StatusRecursoEnum;
 import br.com.fiap.soat.mecanica.domain.ordemServico.OrdemServico;
 import br.com.fiap.soat.mecanica.domain.ordemServico.OrdemServicoRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -12,7 +19,7 @@ import java.util.UUID;
 
 @Repository
 @RequiredArgsConstructor
-public class OrdemServicoRepositoryImpl implements OrdemServicoRepository {
+public class OrdemServicoRepositoryImpl implements OrdemServicoRepository, ListarOrdensServicoAtivasPort {
 
     private final OrdemServicoJpaRepository ordemServicoJpaRepository;
     private final OrdemServicoMapper ordemServicoMapper;
@@ -36,5 +43,31 @@ public class OrdemServicoRepositoryImpl implements OrdemServicoRepository {
                 .stream()
                 .map(ordemServicoMapper::toDomain)
                 .toList();
+    }
+
+    @Override
+    public Pagina<OrdemServico> listarAtivas(Paginacao paginacao) {
+        Page<OrdemServicoEntity> resultado = ordemServicoJpaRepository.listarAtivasOrdenadas(
+                StatusRecursoEnum.ATIVO,
+                SituacaoOrdemServicoEnum.EM_EXECUCAO,
+                SituacaoOrdemServicoEnum.AGUARDANDO_APROVACAO,
+                SituacaoOrdemServicoEnum.EM_DIAGNOSTICO,
+                SituacaoOrdemServicoEnum.RECEBIDA,
+                PageRequest.of(paginacao.page(), paginacao.size())
+        );
+
+        List<OrdemServico> content = resultado.getContent().stream()
+                .map(ordemServicoMapper::toDomain)
+                .toList();
+
+        return new Pagina<>(
+                content,
+                resultado.getNumber(),
+                resultado.getSize(),
+                resultado.getTotalElements(),
+                resultado.getTotalPages(),
+                resultado.isFirst(),
+                resultado.isLast()
+        );
     }
 }

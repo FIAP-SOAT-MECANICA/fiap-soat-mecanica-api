@@ -19,6 +19,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -28,6 +29,8 @@ class CadastrarOrdemServicoUseCaseTest {
     private OrdemServicoRepository repository;
     @Mock
     private CurrentUserProvider currentUser;
+    @Mock
+    private NotificarAlteracaoSituacaoOrdemServicoUseCase notificacaoUseCase;
     @InjectMocks
     private CadastrarOrdemServicoUseCase useCase;
 
@@ -45,6 +48,7 @@ class CadastrarOrdemServicoUseCaseTest {
 
         // Assert
         assertThat(resultado).isNotNull();
+        verifyNoInteractions(notificacaoUseCase);
     }
 
     @Test

@@ -5,9 +5,11 @@ on:
     branches:
       - main
       - feat/**
+      - feature/**
   pull_request:
     branches:
       - main
+      - develop
 
 jobs:
   build:
@@ -29,6 +31,13 @@ jobs:
 
       - name: Run tests with coverage
         run: ./mvnw clean verify
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/
+          retention-days: 7
 
       - name: SonarQube analysis
         if: ${{ env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != '' }}

@@ -4,15 +4,15 @@ services:
     image: postgres:17
     container_name: mecanica-db
     environment:
-      POSTGRES_DB: mecanica
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 1234567
+      POSTGRES_DB: ${POSTGRES_DB:-mecanica}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d mecanica"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -24,7 +24,20 @@ services:
     ports:
       - "8080:8080"
     environment:
-      JWT_SECRET: Ie+o8U7OfpdBdhHUp9mQ+U/8ayI20O2Tp1+35tR2jabK4n2w4BreTofRsQDqzl9aUVpt2nu0azdv3tPWZkROZA==
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      EMAIL_NOTIFICATIONS_ENABLED: "true"
+      EMAIL_FROM: no-reply@mecanica.local
+      SPRING_MAIL_HOST: mailhog
+      SPRING_MAIL_PORT: 1025
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: "false"
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: "false"
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: mecanica-mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
 
   sonarqube-db:
     image: postgres:17
@@ -32,25 +45,25 @@ services:
     environment:
       POSTGRES_DB: sonarqube
       POSTGRES_USER: sonarqube
-      POSTGRES_PASSWORD: sonarqube
+      POSTGRES_PASSWORD: ${SONAR_DB_PASSWORD:?Set SONAR_DB_PASSWORD in .env}
     volumes:
       - sonarqube_db_data:/var/lib/postgresql/data
 
   sonarqube:
-    image: sonarqube:community
-    container_name: sonarqube
-    depends_on:
-      - sonarqube-db
-    ports:
-      - "9000:9000"
-    environment:
-      SONAR_JDBC_URL: jdbc:postgresql://sonarqube-db:5432/sonarqube
-      SONAR_JDBC_USERNAME: sonarqube
-      SONAR_JDBC_PASSWORD: sonarqube
-    volumes:
-      - sonarqube_data:/opt/sonarqube/data
-      - sonarqube_extensions:/opt/sonarqube/extensions
-      - sonarqube_logs:/opt/sonarqube/logs
+     image: sonarqube:community
+     container_name: sonarqube
+     depends_on:
+       - sonarqube-db
+     ports:
+       - "9000:9000"
+     environment:
+       SONAR_JDBC_URL: jdbc:postgresql://sonarqube-db:5432/sonarqube
+       SONAR_JDBC_USERNAME: sonarqube
+       SONAR_JDBC_PASSWORD: ${SONAR_DB_PASSWORD:?Set SONAR_DB_PASSWORD in .env}
+     volumes:
+       - sonarqube_data:/opt/sonarqube/data
+       - sonarqube_extensions:/opt/sonarqube/extensions
+       - sonarqube_logs:/opt/sonarqube/logs
 
 volumes:
   sonarqube_db_data:

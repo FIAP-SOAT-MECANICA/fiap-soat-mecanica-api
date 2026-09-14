@@ -2,6 +2,7 @@ package br.com.fiap.soat.mecanica.application.ordemServico.usecase;
 
 import br.com.fiap.soat.mecanica.domain.exception.RecursoNaoEncontradoException;
 import br.com.fiap.soat.mecanica.domain.exception.RegraNegocioException;
+import br.com.fiap.soat.mecanica.domain.enums.SituacaoOrdemServicoEnum;
 import br.com.fiap.soat.mecanica.domain.ordemServico.OrdemServico;
 import br.com.fiap.soat.mecanica.domain.ordemServico.OrdemServicoRepository;
 import br.com.fiap.soat.mecanica.domain.prestacaoServico.PrestacaoServico;
@@ -20,6 +21,7 @@ public class IniciarExecucaoOrdemServicoUseCase {
 
     private final OrdemServicoRepository ordemServicoRepository;
     private final PrestacaoServicoRepository prestacaoServicoRepository;
+    private final NotificarAlteracaoSituacaoOrdemServicoUseCase notificarAlteracaoSituacaoOrdemServicoUseCase;
 
     @Transactional
     public OrdemServico executar(UUID ordemServicoId) {
@@ -37,6 +39,7 @@ public class IniciarExecucaoOrdemServicoUseCase {
             throw new RegraNegocioException("Ordem de serviço não possui prestações ativas");
         }
 
+        SituacaoOrdemServicoEnum situacaoAnterior = ordemServico.getSituacao();
         ordemServico.iniciarExecucao();
 
         for (PrestacaoServico prestacao : prestacoesAtivas) {
@@ -46,6 +49,8 @@ public class IniciarExecucaoOrdemServicoUseCase {
             }
         }
 
-        return ordemServicoRepository.salvar(ordemServico);
+        OrdemServico ordemServicoSalva = ordemServicoRepository.salvar(ordemServico);
+        notificarAlteracaoSituacaoOrdemServicoUseCase.executar(ordemServicoSalva, situacaoAnterior);
+        return ordemServicoSalva;
     }
 }

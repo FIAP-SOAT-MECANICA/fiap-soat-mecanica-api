@@ -1,5 +1,7 @@
 package br.com.fiap.soat.mecanica.application.prestacaoServico;
 
+import br.com.fiap.soat.mecanica.application.ordemServico.usecase.NotificarAlteracaoSituacaoOrdemServicoUseCase;
+import br.com.fiap.soat.mecanica.domain.enums.SituacaoOrdemServicoEnum;
 import br.com.fiap.soat.mecanica.domain.exception.RecursoNaoEncontradoException;
 import br.com.fiap.soat.mecanica.domain.exception.RegraNegocioException;
 import br.com.fiap.soat.mecanica.domain.ordemServico.OrdemServico;
@@ -22,6 +24,7 @@ public class CadastrarPrestacaoServicoUseCase {
     private final PrestacaoServicoRepository prestacaoServicoRepository;
     private final ServicoRepository servicoRepository;
     private final OrdemServicoRepository ordemServicoRepository;
+    private final NotificarAlteracaoSituacaoOrdemServicoUseCase notificarAlteracaoSituacaoOrdemServicoUseCase;
 
     @Transactional
     public PrestacaoServico executar(BigDecimal precoMaoDeObra, UUID ordemServicoId, UUID servicoId) {
@@ -45,11 +48,13 @@ public class CadastrarPrestacaoServicoUseCase {
 
         ordemServico.adicionarValor(prestacaoSalva.getSubtotal());
 
+        SituacaoOrdemServicoEnum situacaoAnterior = ordemServico.getSituacao();
         if (ordemServico.isRecebida()) {
             ordemServico.iniciarDiagnostico();
         }
 
-        ordemServicoRepository.salvar(ordemServico);
+        OrdemServico ordemServicoSalva = ordemServicoRepository.salvar(ordemServico);
+        notificarAlteracaoSituacaoOrdemServicoUseCase.executar(ordemServicoSalva, situacaoAnterior);
 
         return prestacaoSalva;
     }

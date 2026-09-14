@@ -1,6 +1,7 @@
 package br.com.fiap.soat.mecanica.application.ordemServico.usecase;
 
 import br.com.fiap.soat.mecanica.domain.exception.RecursoNaoEncontradoException;
+import br.com.fiap.soat.mecanica.domain.enums.SituacaoOrdemServicoEnum;
 import br.com.fiap.soat.mecanica.domain.ordemServico.OrdemServico;
 import br.com.fiap.soat.mecanica.domain.ordemServico.OrdemServicoRepository;
 import lombok.RequiredArgsConstructor;
@@ -14,14 +15,18 @@ import java.util.UUID;
 public class EnviarOrdemServicoParaAprovacaoUseCase {
 
     private final OrdemServicoRepository ordemServicoRepository;
+    private final NotificarAlteracaoSituacaoOrdemServicoUseCase notificarAlteracaoSituacaoOrdemServicoUseCase;
 
     @Transactional
     public OrdemServico executar(UUID id) {
         OrdemServico os = ordemServicoRepository.buscarPorId(id)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Ordem de serviço não encontrada"));
 
+        SituacaoOrdemServicoEnum situacaoAnterior = os.getSituacao();
         os.enviarParaAprovacao();
 
-        return ordemServicoRepository.salvar(os);
+        OrdemServico ordemServicoSalva = ordemServicoRepository.salvar(os);
+        notificarAlteracaoSituacaoOrdemServicoUseCase.executar(ordemServicoSalva, situacaoAnterior);
+        return ordemServicoSalva;
     }
 }

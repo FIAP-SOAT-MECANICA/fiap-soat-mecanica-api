@@ -2,6 +2,8 @@ package br.com.fiap.soat.mecanica.application.prestacaoServico;
 
 import br.com.fiap.soat.mecanica.domain.exception.RecursoNaoEncontradoException;
 import br.com.fiap.soat.mecanica.domain.exception.RegraNegocioException;
+import br.com.fiap.soat.mecanica.domain.enums.SituacaoOrdemServicoEnum;
+import br.com.fiap.soat.mecanica.application.ordemServico.usecase.NotificarAlteracaoSituacaoOrdemServicoUseCase;
 import br.com.fiap.soat.mecanica.domain.ordemServico.OrdemServico;
 import br.com.fiap.soat.mecanica.domain.ordemServico.OrdemServicoRepository;
 import br.com.fiap.soat.mecanica.domain.prestacaoServico.PrestacaoServico;
@@ -23,7 +25,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CadastrarPrestacaoServicoUseCaseTest {
@@ -34,6 +36,8 @@ class CadastrarPrestacaoServicoUseCaseTest {
     private ServicoRepository servicoRepository;
     @Mock
     private OrdemServicoRepository ordemServicoRepository;
+    @Mock
+    private NotificarAlteracaoSituacaoOrdemServicoUseCase notificarAlteracaoSituacaoOrdemServicoUseCase;
     @InjectMocks
     private CadastrarPrestacaoServicoUseCase useCase;
 
@@ -56,6 +60,8 @@ class CadastrarPrestacaoServicoUseCaseTest {
 
         // Assert
         assertThat(resultado).isNotNull();
+        verify(notificarAlteracaoSituacaoOrdemServicoUseCase)
+                .executar(os, SituacaoOrdemServicoEnum.RECEBIDA);
     }
 
     @Test
@@ -77,6 +83,8 @@ class CadastrarPrestacaoServicoUseCaseTest {
 
         // Assert
         assertThat(resultado).isNotNull();
+        verify(notificarAlteracaoSituacaoOrdemServicoUseCase)
+                .executar(os, SituacaoOrdemServicoEnum.EM_DIAGNOSTICO);
     }
 
     @Test

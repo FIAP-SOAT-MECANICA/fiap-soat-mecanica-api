@@ -1,0 +1,6 @@
+# Copie para terraform.tfvars e substitua os valores marcados.
+# Nunca versione terraform.tfvars.
+
+api_image   = "ghcr.io/example/fiap-soat-mecanica-api:replace-with-commit-sha"
+db_password = "replace-with-a-strong-password"
+jwt_secret  = "replace-with-a-base64-encoded-secret-of-at-least-32-characters"

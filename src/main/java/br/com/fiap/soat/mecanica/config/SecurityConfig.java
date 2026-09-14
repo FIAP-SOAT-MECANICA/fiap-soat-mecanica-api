@@ -36,10 +36,13 @@ public class SecurityConfig {
                                 "/auth/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
-                                "/swagger-ui.html"
+                                "/swagger-ui.html",
+                                "/actuator/health/**"
                         ).permitAll()
                         .requestMatchers(HttpMethod.POST, "/usuarios").permitAll()
                         .requestMatchers(HttpMethod.GET, "/ordem-servicos/veiculo/placa/**").permitAll()
+                        .requestMatchers(HttpMethod.PATCH, "/ordem-servicos/*/aprovar-orcamento").permitAll()
+                        .requestMatchers(HttpMethod.PATCH, "/ordem-servicos/*/recusar-orcamento").permitAll()
                         // qualquer outra rota precisa de autenticação
                         .anyRequest().authenticated()
                 )
