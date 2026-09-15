@@ -15,9 +15,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  image:
+    name: Resolve immutable image tag
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    outputs:
+      image: ghcr.io/${{ steps.repo.outputs.image_repo }}:${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Lowercase repository name for the GHCR tag
+        id: repo
+        run: echo "image_repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
   docker:
     name: Build and publish immutable image
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    needs: image
     runs-on: ubuntu-latest
 
     steps:
@@ -39,17 +51,17 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository }}:${{ github.event.workflow_run.head_sha }}
+          tags: ${{ needs.image.outputs.image }}
 
   deploy:
     name: Provision, validate and destroy Kind
-    needs: docker
+    needs: [image, docker]
     runs-on: ubuntu-latest
     env:
       TF_IN_AUTOMATION: "true"
       TF_VAR_cluster_name: oficina-cluster
       TF_VAR_namespace: mecanica
-      TF_VAR_api_image: ghcr.io/${{ github.repository }}:${{ github.event.workflow_run.head_sha }}
+      TF_VAR_api_image: ${{ needs.image.outputs.image }}
       TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
       TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
       KUBECONFIG: ${{ github.workspace }}/infra/kubeconfig
@@ -190,7 +202,7 @@ jobs:
   deploy-eks:
     name: Deploy to AWS EKS
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    needs: docker
+    needs: [image, docker]
     runs-on: ubuntu-latest
     concurrency:
       group: deploy-eks
@@ -200,7 +212,7 @@ jobs:
       CLUSTER_NAME: ${{ vars.CLUSTER_NAME || 'mecanica' }}
       NAMESPACE: ${{ vars.NAMESPACE || 'mecanica' }}
       DB_SECRET_NAME: ${{ vars.DB_SECRET_NAME || 'mecanica-db-credentials' }}
-      API_IMAGE: ghcr.io/${{ github.repository }}:${{ github.event.workflow_run.head_sha }}
+      API_IMAGE: ${{ needs.image.outputs.image }}
       API_NODE_PORT: ${{ vars.API_NODE_PORT || '30080' }}
 
     steps:
