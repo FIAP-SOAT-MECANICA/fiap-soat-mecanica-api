@@ -99,3 +99,14 @@ variable "jwt_secret" {
     error_message = "jwt_secret deve possuir ao menos 32 caracteres."
   }
 }
+
+variable "datadog_api_key" {
+  type        = string
+  description = "API key usada pelo OpenTelemetry Collector."
+  sensitive   = true
+
+  validation {
+    condition     = length(var.datadog_api_key) >= 20
+    error_message = "datadog_api_key deve possuir ao menos 20 caracteres."
+  }
+}
