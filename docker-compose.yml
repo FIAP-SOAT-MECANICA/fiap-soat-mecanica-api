@@ -21,15 +21,9 @@ services:
   app:
     build: .
     container_name: mecanica-api
-    depends_on:
-      postgres:
-        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-mecanica}
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       EMAIL_NOTIFICATIONS_ENABLED: "true"
       EMAIL_FROM: no-reply@mecanica.local
@@ -72,7 +66,6 @@ services:
        - sonarqube_logs:/opt/sonarqube/logs
 
 volumes:
-  postgres_data:
   sonarqube_db_data:
   sonarqube_data:
   sonarqube_extensions:
