@@ -186,3 +186,144 @@ jobs:
             echo "$leftovers"
             exit 1
           fi
+
+  deploy-eks:
+    name: Deploy to AWS EKS
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    needs: docker
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-eks
+      cancel-in-progress: false
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || vars.TF_STATE_REGION || 'us-east-1' }}
+      CLUSTER_NAME: ${{ vars.CLUSTER_NAME || 'mecanica' }}
+      NAMESPACE: ${{ vars.NAMESPACE || 'mecanica' }}
+      DB_SECRET_NAME: ${{ vars.DB_SECRET_NAME || 'mecanica-db-credentials' }}
+      API_IMAGE: ghcr.io/${{ github.repository }}:${{ github.event.workflow_run.head_sha }}
+      API_NODE_PORT: ${{ vars.API_NODE_PORT || '30080' }}
+
+    steps:
+      - name: Checkout the tested commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Check required secrets
+        shell: bash
+        run: |
+          test -n "${{ secrets.JWT_SECRET }}" || { echo "Missing repository secret JWT_SECRET"; exit 1; }
+
+      - name: Verify that the GHCR image is public
+        shell: bash
+        run: |
+          docker logout ghcr.io || true
+          docker pull "$API_IMAGE"
+
+      - name: Point kubectl at the EKS cluster
+        run: aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Ensure envsubst is available
+        shell: bash
+        run: |
+          if ! command -v envsubst >/dev/null; then
+            sudo apt-get update -y
+            sudo apt-get install -y --no-install-recommends gettext-base
+          fi
+
+      - name: Apply namespace
+        run: namespace="$NAMESPACE" envsubst < k8s/namespace.yaml | kubectl apply -f -
+
+      - name: Read RDS credentials from Secrets Manager
+        id: db
+        shell: bash
+        run: |
+          secret_json="$(aws secretsmanager get-secret-value --secret-id "$DB_SECRET_NAME" --query SecretString --output text)"
+          db_host="$(jq -r .host <<< "$secret_json")"
+          db_port="$(jq -r .port <<< "$secret_json")"
+          db_name="$(jq -r .dbname <<< "$secret_json")"
+          db_user="$(jq -r .username <<< "$secret_json")"
+          db_pass="$(jq -r .password <<< "$secret_json")"
+          echo "::add-mask::$db_user"
+          echo "::add-mask::$db_pass"
+          {
+            echo "host=$db_host"
+            echo "port=$db_port"
+            echo "name=$db_name"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "user=$db_user"
+            echo "pass=$db_pass"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Apply API secret
+        env:
+          DB_USER: ${{ steps.db.outputs.user }}
+          DB_PASS: ${{ steps.db.outputs.pass }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          kubectl create secret generic mecanica-api-secret \
+            --namespace "$NAMESPACE" \
+            --from-literal=SPRING_DATASOURCE_USERNAME="$DB_USER" \
+            --from-literal=SPRING_DATASOURCE_PASSWORD="$DB_PASS" \
+            --from-literal=JWT_SECRET="$JWT_SECRET" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply API configmap
+        env:
+          DB_HOST: ${{ steps.db.outputs.host }}
+          DB_PORT: ${{ steps.db.outputs.port }}
+          DB_NAME: ${{ steps.db.outputs.name }}
+        run: |
+          kubectl create configmap mecanica-api-config \
+            --namespace "$NAMESPACE" \
+            --from-literal=SPRING_DATASOURCE_URL="jdbc:postgresql://$DB_HOST:$DB_PORT/$DB_NAME" \
+            --from-literal=EMAIL_NOTIFICATIONS_ENABLED=false \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply API service, deployment and HPA
+        run: |
+          namespace="$NAMESPACE" api_node_port="$API_NODE_PORT" envsubst < k8s/api-service.yaml | kubectl apply -f -
+          namespace="$NAMESPACE" api_image="$API_IMAGE" envsubst < k8s/api-deployment.yaml | kubectl apply -f -
+          namespace="$NAMESPACE" envsubst < k8s/api-hpa.yaml | kubectl apply -f -
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/mecanica-api --namespace "$NAMESPACE" --timeout=300s
+
+      - name: Health check via port-forward
+        shell: bash
+        run: |
+          kubectl port-forward svc/mecanica-api 18080:8080 --namespace "$NAMESPACE" &
+          pf_pid=$!
+          trap 'kill $pf_pid' EXIT
+          sleep 5
+          curl --fail --retry 12 --retry-delay 5 --retry-all-errors \
+            http://127.0.0.1:18080/actuator/health/readiness
+
+      - name: Print access instructions
+        run: |
+          {
+            echo "### API disponivel no EKS"
+            echo ""
+            echo "Imagem: \`$API_IMAGE\`"
+            echo ""
+            echo "Para acessar durante a demo, rode localmente (com as credenciais do Learner Lab ativas):"
+            echo ""
+            echo '```bash'
+            echo "aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION"
+            echo "kubectl port-forward svc/mecanica-api 8080:8080 --namespace $NAMESPACE"
+            echo '```'
+            echo ""
+            echo "Depois acesse http://localhost:8080/swagger-ui.html"
+          } >> "$GITHUB_STEP_SUMMARY"
