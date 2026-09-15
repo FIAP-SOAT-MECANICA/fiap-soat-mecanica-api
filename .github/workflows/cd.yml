@@ -212,6 +212,7 @@ jobs:
       CLUSTER_NAME: ${{ vars.CLUSTER_NAME || 'mecanica' }}
       NAMESPACE: ${{ vars.NAMESPACE || 'mecanica' }}
       DB_SECRET_NAME: ${{ vars.DB_SECRET_NAME || 'mecanica-db-credentials' }}
+      AUTH_JWT_SECRET_NAME: ${{ vars.AUTH_JWT_SECRET_NAME || 'fiap-soat-mecanica-auth-production-jwt' }}
       API_IMAGE: ${{ needs.image.outputs.image }}
       API_NODE_PORT: ${{ vars.API_NODE_PORT || '30080' }}
 
@@ -278,17 +279,33 @@ jobs:
             echo "pass=$db_pass"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Read Auth JWT secret from Secrets Manager (best-effort)
+        id: auth
+        shell: bash
+        run: |
+          secret_json="$(aws secretsmanager get-secret-value --secret-id "$AUTH_JWT_SECRET_NAME" --query SecretString --output text 2>/dev/null || true)"
+          if [[ -z "$secret_json" ]]; then
+            echo "Auth JWT secret '$AUTH_JWT_SECRET_NAME' not found yet - client tokens will be rejected until the -auth repo is deployed."
+            echo "secret=" >> "$GITHUB_OUTPUT"
+          else
+            auth_secret="$(jq -r .secret <<< "$secret_json")"
+            echo "::add-mask::$auth_secret"
+            echo "secret=$auth_secret" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Apply API secret
         env:
           DB_USER: ${{ steps.db.outputs.user }}
           DB_PASS: ${{ steps.db.outputs.pass }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          AUTH_JWT_SECRET: ${{ steps.auth.outputs.secret }}
         run: |
           kubectl create secret generic mecanica-api-secret \
             --namespace "$NAMESPACE" \
             --from-literal=SPRING_DATASOURCE_USERNAME="$DB_USER" \
             --from-literal=SPRING_DATASOURCE_PASSWORD="$DB_PASS" \
             --from-literal=JWT_SECRET="$JWT_SECRET" \
+            --from-literal=AUTH_JWT_SECRET="$AUTH_JWT_SECRET" \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Apply API configmap

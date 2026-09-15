@@ -17,6 +17,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -86,6 +88,45 @@ class JwtAuthenticationFilterTest {
 
         // Assert
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("Deve autenticar cliente quando token do Auth é válido")
+    void deveAutenticarCliente_quandoTokenDeClienteValido() throws Exception {
+        // Arrange
+        UUID clienteId = UUID.randomUUID();
+        when(request.getHeader("Authorization")).thenReturn("Bearer client-token");
+        when(jwtService.extractClienteId("client-token")).thenReturn(Optional.of(clienteId));
+
+        // Act
+        filter.doFilterInternal(request, response, filterChain);
+
+        // Assert
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        assertThat(auth).isNotNull();
+        assertThat(auth.getPrincipal()).isEqualTo(new ClientePrincipal(clienteId));
+        assertThat(auth.getAuthorities()).extracting(Object::toString).containsExactly("ROLE_CLIENTE");
+        verify(userDetailsService, never()).loadUserByUsername(anyString());
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("Deve cair no fluxo interno quando token não é de cliente")
+    void deveTentarFluxoInterno_quandoTokenNaoEhDeCliente() throws Exception {
+        // Arrange
+        when(request.getHeader("Authorization")).thenReturn("Bearer valid-token");
+        when(jwtService.extractClienteId("valid-token")).thenReturn(Optional.empty());
+        when(jwtService.extractUsername("valid-token")).thenReturn("teste@email.com");
+        UserDetails userDetails = new User("teste@email.com", "pass", List.of());
+        when(userDetailsService.loadUserByUsername("teste@email.com")).thenReturn(userDetails);
+        when(jwtService.isTokenValid("valid-token", userDetails)).thenReturn(true);
+
+        // Act
+        filter.doFilterInternal(request, response, filterChain);
+
+        // Assert
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
         verify(filterChain).doFilter(request, response);
     }
 }
