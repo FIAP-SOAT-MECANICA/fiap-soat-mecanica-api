@@ -3,7 +3,6 @@ package br.com.fiap.soat.mecanica.application.ordemServico.usecase;
 import br.com.fiap.soat.mecanica.domain.alocacaoPecas.AlocacaoPeca;
 import br.com.fiap.soat.mecanica.domain.alocacaoPecas.AlocacaoPecaRepository;
 import br.com.fiap.soat.mecanica.domain.exception.RecursoNaoEncontradoException;
-import br.com.fiap.soat.mecanica.domain.enums.SituacaoOrdemServicoEnum;
 import br.com.fiap.soat.mecanica.domain.ordemServico.OrdemServico;
 import br.com.fiap.soat.mecanica.domain.ordemServico.OrdemServicoRepository;
 import br.com.fiap.soat.mecanica.domain.peca.Peca;
@@ -17,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.UUID;
 
-import static br.com.fiap.soat.mecanica.config.observability.BusinessEventLogger.situacaoOrdemServicoAlterada;
+import static br.com.fiap.soat.mecanica.config.observability.BusinessEventLogger.ordemServicoCancelada;
 
 @Service
 @RequiredArgsConstructor
@@ -34,7 +33,6 @@ public class CancelarOrdemServicoPorDesistenciaUseCase {
         OrdemServico os = ordemServicoRepository.buscarPorId(osId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Ordem de serviço não encontrada"));
 
-        SituacaoOrdemServicoEnum situacaoAnterior = os.getSituacao();
         os.cancelarPorDesistencia();
 
         List<PrestacaoServico> prestacoes =
@@ -64,7 +62,7 @@ public class CancelarOrdemServicoPorDesistenciaUseCase {
         }
 
         OrdemServico ordemServicoSalva = ordemServicoRepository.salvar(os);
-        situacaoOrdemServicoAlterada(ordemServicoSalva.getId(), situacaoAnterior, ordemServicoSalva.getSituacao());
+        ordemServicoCancelada(ordemServicoSalva.getId());
         return ordemServicoSalva;
     }
 }

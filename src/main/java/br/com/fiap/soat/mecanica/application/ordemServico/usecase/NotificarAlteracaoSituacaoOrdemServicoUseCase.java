@@ -87,32 +87,34 @@ public class NotificarAlteracaoSituacaoOrdemServicoUseCase {
     private void enviar(NotificacaoOrdemServico notificacao) {
         try {
             notificacaoOrdemServicoPort.enviar(notificacao);
-            log.info("order_service_notification_sent orderServiceId={} previousStatus={} newStatus={}",
-                    notificacao.ordemServicoId(),
-                    notificacao.situacaoAnterior(),
-                    notificacao.novaSituacao());
+            log.atInfo()
+                    .addKeyValue("event", "order_service_notification_sent")
+                    .addKeyValue("orderServiceId", notificacao.ordemServicoId())
+                    .addKeyValue("previousStatus", notificacao.situacaoAnterior())
+                    .addKeyValue("newStatus", notificacao.novaSituacao())
+                    .log("Order service notification sent");
         } catch (RuntimeException ex) {
             registrarFalha(notificacao, ex);
         }
     }
 
     private void registrarFalha(java.util.UUID ordemServicoId, RuntimeException ex) {
-        log.error(
-                "order_service_notification_preparation_failed orderServiceId={} exceptionType={}",
-                ordemServicoId,
-                ex.getClass().getSimpleName(),
-                ex
-        );
+        log.atError()
+                .setCause(ex)
+                .addKeyValue("event", "order_service_notification_preparation_failed")
+                .addKeyValue("orderServiceId", ordemServicoId)
+                .addKeyValue("exceptionType", ex.getClass().getSimpleName())
+                .log("Order service notification preparation failed");
     }
 
     private void registrarFalha(NotificacaoOrdemServico notificacao, RuntimeException ex) {
-        log.error(
-                "order_service_notification_send_failed orderServiceId={} previousStatus={} newStatus={} exceptionType={}",
-                notificacao.ordemServicoId(),
-                notificacao.situacaoAnterior(),
-                notificacao.novaSituacao(),
-                ex.getClass().getSimpleName(),
-                ex
-        );
+        log.atError()
+                .setCause(ex)
+                .addKeyValue("event", "order_service_notification_send_failed")
+                .addKeyValue("orderServiceId", notificacao.ordemServicoId())
+                .addKeyValue("previousStatus", notificacao.situacaoAnterior())
+                .addKeyValue("newStatus", notificacao.novaSituacao())
+                .addKeyValue("exceptionType", ex.getClass().getSimpleName())
+                .log("Order service notification send failed");
     }
 }

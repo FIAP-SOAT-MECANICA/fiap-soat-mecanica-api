@@ -22,6 +22,9 @@ import java.util.concurrent.TimeUnit;
 public class HttpRequestLoggingFilter extends OncePerRequestFilter {
 
     static final String REQUEST_ID_HEADER = "X-Request-Id";
+    private static final String UUID_PATH_SEGMENT =
+            "(?i)(?<=/)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?=/|$)";
+    private static final String NUMERIC_PATH_SEGMENT = "(?<=/)\\d+(?=/|$)";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -31,16 +34,32 @@ public class HttpRequestLoggingFilter extends OncePerRequestFilter {
 
         try (MDC.MDCCloseable ignored = MDC.putCloseable("requestId", requestId)) {
             response.setHeader(REQUEST_ID_HEADER, requestId);
-            filterChain.doFilter(request, response);
-        } finally {
-            if (!isHealthCheck(request)) {
-                Object routePattern = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
-                String route = routePattern == null ? request.getRequestURI() : routePattern.toString();
-                long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
-                log.info("http_request_completed method={} route={} status={} durationMs={} requestId={}",
-                        request.getMethod(), route, response.getStatus(), durationMs, requestId);
+            try {
+                filterChain.doFilter(request, response);
+            } finally {
+                if (!isHealthCheck(request)) {
+                    long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+                    log.atInfo()
+                            .addKeyValue("event", "http_request_completed")
+                            .addKeyValue("method", request.getMethod())
+                            .addKeyValue("route", normalizedRoute(request))
+                            .addKeyValue("status", response.getStatus())
+                            .addKeyValue("durationMs", durationMs)
+                            .log("HTTP request completed");
+                }
             }
         }
+    }
+
+    String normalizedRoute(HttpServletRequest request) {
+        Object routePattern = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
+        if (routePattern != null) {
+            return routePattern.toString();
+        }
+
+        return request.getRequestURI()
+                .replaceAll(UUID_PATH_SEGMENT, "{id}")
+                .replaceAll(NUMERIC_PATH_SEGMENT, "{id}");
     }
 
     private String validRequestId(String value) {

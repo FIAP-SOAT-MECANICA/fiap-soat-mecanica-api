@@ -29,7 +29,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException ex) {
-        log.debug("request_constraint_violation violations={}", ex.getConstraintViolations().size());
+        log.atDebug().addKeyValue("event", "request_constraint_violation")
+                .addKeyValue("violations", ex.getConstraintViolations().size()).log("Request constraint violation");
         List<String> detalhes = ex.getConstraintViolations().stream()
                 .map(v -> v.getPropertyPath() + ": " + v.getMessage())
                 .toList();
@@ -40,7 +41,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
-        log.debug("request_validation_failed fieldErrorCount={}", ex.getBindingResult().getFieldErrorCount());
+        log.atDebug().addKeyValue("event", "request_validation_failed")
+                .addKeyValue("fieldErrorCount", ex.getBindingResult().getFieldErrorCount()).log("Request validation failed");
         List<String> detalhes = ex.getBindingResult()
                 .getFieldErrors()
                 .stream()
@@ -61,7 +63,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleJsonError(HttpMessageNotReadableException ex) {
-        log.debug("request_body_not_readable exceptionType={}", ex.getClass().getSimpleName());
+        log.atDebug().addKeyValue("event", "request_body_not_readable")
+                .addKeyValue("exceptionType", ex.getClass().getSimpleName()).log("Request body is not readable");
         Throwable cause = ex.getCause();
 
         if (cause instanceof InvalidFormatException ife) {
@@ -106,7 +109,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(RecursoNaoEncontradoException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(RecursoNaoEncontradoException ex) {
-        log.info("resource_not_found message={}", ex.getMessage());
+        log.atInfo().addKeyValue("event", "resource_not_found")
+                .addKeyValue("reason", ex.getMessage()).log("Resource not found");
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
                 new ErrorResponse(
                         404,
@@ -121,7 +125,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(SenhaInvalidaException.class)
     public ResponseEntity<ErrorResponse> handleSenhaInvalida(SenhaInvalidaException ex) {
-        log.warn("authentication_failed reason={}", ex.getClass().getSimpleName());
+        log.atWarn().addKeyValue("event", "authentication_failed")
+                .addKeyValue("reason", ex.getClass().getSimpleName()).log("Authentication failed");
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
                 new ErrorResponse(
                         401,
@@ -136,7 +141,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(RegraNegocioException.class)
     public ResponseEntity<ErrorResponse> handleRegraNegocio(RegraNegocioException ex) {
-        log.info("business_rule_rejected message={}", ex.getMessage());
+        log.atInfo().addKeyValue("event", "business_rule_rejected")
+                .addKeyValue("reason", ex.getMessage()).log("Business rule rejected request");
         return ResponseEntity.status(422).body(
                 new ErrorResponse(
                         422,
@@ -151,7 +157,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex) {
-        log.warn("data_integrity_violation exceptionType={}", ex.getClass().getSimpleName());
+        log.atWarn().addKeyValue("event", "data_integrity_violation")
+                .addKeyValue("exceptionType", ex.getClass().getSimpleName()).log("Data integrity violation");
         return ResponseEntity.badRequest().body(
                 new ErrorResponse(
                         400,
@@ -166,7 +173,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex) {
-        log.debug("illegal_argument exceptionType={}", ex.getClass().getSimpleName());
+        log.atDebug().addKeyValue("event", "illegal_argument")
+                .addKeyValue("exceptionType", ex.getClass().getSimpleName()).log("Illegal argument");
         return ResponseEntity.badRequest().body(
                 new ErrorResponse(
                         400,
@@ -181,7 +189,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
-        log.debug("request_parameter_type_mismatch parameter={}", ex.getName());
+        log.atDebug().addKeyValue("event", "request_parameter_type_mismatch")
+                .addKeyValue("parameter", ex.getName()).log("Request parameter type mismatch");
         return ResponseEntity.badRequest().body(
                 new ErrorResponse(
                         400,
@@ -196,7 +205,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
-        log.info("http_method_not_supported method={}", ex.getMethod());
+        log.atInfo().addKeyValue("event", "http_method_not_supported")
+                .addKeyValue("method", ex.getMethod()).log("HTTP method not supported");
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(
                 new ErrorResponse(
                         405,
@@ -211,7 +221,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException ex) {
-        log.debug("http_resource_not_found path={}", ex.getResourcePath());
+        log.atDebug().addKeyValue("event", "http_resource_not_found")
+                .addKeyValue("path", ex.getResourcePath()).log("HTTP resource not found");
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
                 new ErrorResponse(
                         404,
@@ -226,7 +237,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
-        log.error("unexpected_error", ex);
+        log.atError().setCause(ex).addKeyValue("event", "unexpected_error").log("Unexpected application error");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                 new ErrorResponse(
                         500,
@@ -244,7 +255,8 @@ public class GlobalExceptionHandler {
             AuthorizationDeniedException.class
     })
     public ResponseEntity<ErrorResponse> handleAuthorizationDenied(Exception ex) {
-        log.warn("authorization_denied exceptionType={}", ex.getClass().getSimpleName());
+        log.atWarn().addKeyValue("event", "authorization_denied")
+                .addKeyValue("exceptionType", ex.getClass().getSimpleName()).log("Authorization denied");
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
                 new ErrorResponse(
                         403,

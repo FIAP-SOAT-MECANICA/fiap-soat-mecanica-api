@@ -12,15 +12,32 @@ import java.util.UUID;
 public final class BusinessEventLogger {
 
     public static void ordemServicoCriada(UUID ordemServicoId, UUID veiculoId, UUID mecanicoId) {
-        log.info("order_service_created orderServiceId={} vehicleId={} mechanicId={}",
-                ordemServicoId, veiculoId, mecanicoId);
+        log.atInfo()
+                .addKeyValue("event", "order_service_created")
+                .addKeyValue("orderServiceId", ordemServicoId)
+                .addKeyValue("vehicleId", veiculoId)
+                .addKeyValue("mechanicId", mecanicoId)
+                .log("Order service created");
     }
 
     public static void situacaoOrdemServicoAlterada(
             UUID ordemServicoId,
             SituacaoOrdemServicoEnum situacaoAnterior,
             SituacaoOrdemServicoEnum novaSituacao) {
-        log.info("order_service_status_changed orderServiceId={} previousStatus={} newStatus={}",
-                ordemServicoId, situacaoAnterior, novaSituacao);
+        log.atInfo()
+                .addKeyValue("event", "order_service_status_changed")
+                .addKeyValue("orderServiceId", ordemServicoId)
+                .addKeyValue("previousStatus", situacaoAnterior)
+                .addKeyValue("newStatus", novaSituacao)
+                .log("Order service status changed");
+    }
+
+    public static void ordemServicoCancelada(UUID ordemServicoId) {
+        log.atInfo()
+                .addKeyValue("event", "order_service_cancelled")
+                .addKeyValue("orderServiceId", ordemServicoId)
+                .addKeyValue("previousResourceStatus", "ATIVO")
+                .addKeyValue("newResourceStatus", "INATIVO")
+                .log("Order service cancelled");
     }
 }

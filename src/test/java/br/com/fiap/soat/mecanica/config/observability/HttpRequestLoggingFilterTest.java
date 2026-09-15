@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.web.servlet.HandlerMapping;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicReference;
@@ -39,5 +40,22 @@ class HttpRequestLoggingFilterTest {
         assertThat(response.getHeader(HttpRequestLoggingFilter.REQUEST_ID_HEADER))
                 .isNotBlank()
                 .isNotEqualTo("valor com espacos\nindevido");
+    }
+
+    @Test
+    void deveSanitizarIdentificadoresQuandoRotaAindaNaoFoiResolvida() {
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "GET", "/pecas/55555555-5555-4555-8555-555555555555/itens/123");
+
+        assertThat(filter.normalizedRoute(request)).isEqualTo("/pecas/{id}/itens/{id}");
+    }
+
+    @Test
+    void devePreferirTemplateResolvidoPeloSpring() {
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "GET", "/pecas/55555555-5555-4555-8555-555555555555");
+        request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, "/pecas/{pecaId}");
+
+        assertThat(filter.normalizedRoute(request)).isEqualTo("/pecas/{pecaId}");
     }
 }
