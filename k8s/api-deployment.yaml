@@ -3,8 +3,11 @@ kind: Deployment
 metadata:
   name: mecanica-api
   namespace: ${namespace}
+  labels:
+    tags.datadoghq.com/env: "prd"
+    tags.datadoghq.com/service: "mecanica-api"
+    tags.datadoghq.com/version: "1.0.0" 
 spec:
-  replicas: 2
   selector:
     matchLabels:
       app: mecanica-api
@@ -12,6 +15,9 @@ spec:
     metadata:
       labels:
         app: mecanica-api
+        tags.datadoghq.com/env: "prd"
+        tags.datadoghq.com/service: "mecanica-api"
+        tags.datadoghq.com/version: "1.0.0" 
       annotations:
         # Instrução para o Operator injetar o agente Java automaticamente
         instrumentation.opentelemetry.io/inject-java: "java-instrumentation"
@@ -34,6 +40,19 @@ spec:
                 name: mecanica-api-secret
             - configMapRef:
                 name: mecanica-api-config
+          env:
+          - name: DD_ENV
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.labels['tags.datadoghq.com/env']
+          - name: DD_SERVICE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.labels['tags.datadoghq.com/service']
+          - name: DD_VERSION
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.labels['tags.datadoghq.com/version']
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
@@ -64,6 +83,13 @@ spec:
               memory: "1024Mi"
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true # Bloqueia o disco contra gravações indevidas
             capabilities:
               drop:
                 - ALL
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp # Necessário para o Spring Boot rodar com readOnlyRootFilesystem
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}

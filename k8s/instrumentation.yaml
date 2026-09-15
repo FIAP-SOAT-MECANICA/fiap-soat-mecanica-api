@@ -28,13 +28,3 @@ spec:
       - name: OTEL_LOGS_EXPORTER
         value: "otlp"
 
-      - name: DD_SERVICE
-        valueFrom:
-          fieldRef:
-            fieldPath: metadata.labels['app']
-
-      # ATRIBUIÇÃO AO RECURSO OPENTELEMETRY
-      # O Datadog Collector traduzirá 'service.name', 'deployment.environment' e 'service.version'
-      # automaticamente para 'service', 'env' e 'version' no seu painel.
-      - name: OTEL_RESOURCE_ATTRIBUTES
-        value: "service.name=$(DD_SERVICE),deployment.environment=local,service.version=1.0.0"

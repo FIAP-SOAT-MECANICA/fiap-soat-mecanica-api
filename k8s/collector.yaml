@@ -7,6 +7,18 @@ spec:
   mode: daemonset # Garante uma réplica por nó da infraestrutura
   image: otel/opentelemetry-collector-contrib:0.152.0
   serviceAccount: otel-collector
+    
+  # ADICIONADO: Monta o sistema de arquivos do host para o hostmetrics
+  volumes:
+    - name: hostfs
+      hostPath:
+        path: /
+  volumeMounts:
+    - name: hostfs
+      mountPath: /hostfs
+      readOnly: true
+      mountPropagation: HostToContainer
+
   resources:
     requests:
       cpu: 100m
@@ -30,6 +42,9 @@ spec:
           key: DD_API_KEY
 
   config:
+    connectors:
+      datadog/connector: {}
+
     receivers:
       otlp:
         protocols:
@@ -40,24 +55,44 @@ spec:
 
       # ATIVAÇÃO: Coleta métricas de CPU e Memória do nó hospedeiro
       hostmetrics:
-        root_path: /hostfs # Aponta para o volume montado abaixo
+        root_path: /hostfs
         collection_interval: 10s
         scrapers:
-          cpu: {}
-          memory: {}
+          paging:
+            metrics:
+              system.paging.utilization:
+                enabled: true
+          cpu:
+            metrics:
+              system.cpu.utilization:
+                enabled: true
           disk: {}
-          filesystem: {}
-          network: {}
+          filesystem:
+            metrics:
+              system.filesystem.utilization:
+                enabled: true
           load: {}
+          memory: {}
+          network: {}
+          processes: {}
 
     processors:
+      resource:
+        attributes:
+          - key: deployment.environment
+            value: "prd" # Coloque o mesmo ambiente da sua API
+            action: insert
+          - key: k8s.cluster.name
+            value: "oficina-cluster" # Nome do seu cluster Kubernetes
+            action: insert
       memory_limiter:
         check_interval: 1s
         limit_percentage: 75
         spike_limit_percentage: 15
       batch:
-        send_batch_size: 8192
-        timeout: 5s
+        send_batch_max_size: 100
+        send_batch_size: 10
+        timeout: 10s
         
       # Vincula as métricas do nó e da app de forma unificada no Datadog
       k8sattributes:
@@ -77,7 +112,7 @@ spec:
           hostname_sources: ["os"]
 
     exporters:
-      datadog:
+      datadog/exporter:
         api:
           key: $${env:DD_API_KEY}
           site: datadoghq.com
@@ -87,24 +122,13 @@ spec:
         traces:
           receivers: [otlp]
           processors: [memory_limiter, k8sattributes, batch]
-          exporters: [datadog]
+          exporters: [datadog/connector, datadog/exporter]
         metrics:
           # ADICIONADO: O pipeline de métricas agora recebe tanto os dados do Java (otlp) quanto os do Host (hostmetrics)
-          receivers: [otlp, hostmetrics]
-          processors: [memory_limiter, resourcedetection, k8sattributes, batch]
-          exporters: [datadog]
+          receivers: [datadog/connector, otlp, hostmetrics]
+          processors: [memory_limiter, resourcedetection, resource, k8sattributes, batch]
+          exporters: [datadog/exporter]
         logs:
           receivers: [otlp]
           processors: [memory_limiter, k8sattributes, batch]
-          exporters: [datadog]
-
-  # Mapeia as pastas físicas do nó para dentro do container do OpenTelemetry
-  volumeMounts:
-    - name: hostfs
-      mountPath: /hostfs
-      readOnly: true
-      mountPropagation: HostToContainer
-  volumes:
-    - name: hostfs
-      hostPath:
-        path: /
+          exporters: [datadog/exporter]
