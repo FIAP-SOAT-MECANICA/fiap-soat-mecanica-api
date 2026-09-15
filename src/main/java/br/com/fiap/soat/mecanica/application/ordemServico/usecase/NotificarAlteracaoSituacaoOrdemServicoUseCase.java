@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import static br.com.fiap.soat.mecanica.config.observability.BusinessEventLogger.situacaoOrdemServicoAlterada;
+
 @Slf4j
 @Service
 public class NotificarAlteracaoSituacaoOrdemServicoUseCase {
@@ -36,7 +38,14 @@ public class NotificarAlteracaoSituacaoOrdemServicoUseCase {
     }
 
     public void executar(OrdemServico ordemServico, SituacaoOrdemServicoEnum situacaoAnterior) {
-        if (!notificacaoHabilitada || situacaoAnterior == ordemServico.getSituacao()) {
+        if (situacaoAnterior == ordemServico.getSituacao()) {
+            return;
+        }
+
+        executarAposCommit(() -> situacaoOrdemServicoAlterada(
+                ordemServico.getId(), situacaoAnterior, ordemServico.getSituacao()));
+
+        if (!notificacaoHabilitada) {
             return;
         }
 
@@ -54,40 +63,58 @@ public class NotificarAlteracaoSituacaoOrdemServicoUseCase {
                     ordemServico.getSituacao()
             );
 
-            enviarAposCommit(notificacao);
+            executarAposCommit(() -> enviar(notificacao));
         } catch (RuntimeException ex) {
             registrarFalha(ordemServico.getId(), ex);
         }
     }
 
-    private void enviarAposCommit(NotificacaoOrdemServico notificacao) {
-        Runnable envio = () -> {
-            try {
-                notificacaoOrdemServicoPort.enviar(notificacao);
-            } catch (RuntimeException ex) {
-                registrarFalha(notificacao.ordemServicoId(), ex);
-            }
-        };
-
+    private void executarAposCommit(Runnable acao) {
         if (TransactionSynchronizationManager.isActualTransactionActive()
                 && TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    envio.run();
+                    acao.run();
                 }
             });
             return;
         }
 
-        envio.run();
+        acao.run();
+    }
+
+    private void enviar(NotificacaoOrdemServico notificacao) {
+        try {
+            notificacaoOrdemServicoPort.enviar(notificacao);
+            log.atInfo()
+                    .addKeyValue("event", "order_service_notification_sent")
+                    .addKeyValue("orderServiceId", notificacao.ordemServicoId())
+                    .addKeyValue("previousStatus", notificacao.situacaoAnterior())
+                    .addKeyValue("newStatus", notificacao.novaSituacao())
+                    .log("Order service notification sent");
+        } catch (RuntimeException ex) {
+            registrarFalha(notificacao, ex);
+        }
     }
 
     private void registrarFalha(java.util.UUID ordemServicoId, RuntimeException ex) {
-        log.error(
-                "Falha ao enviar notificacao de status da ordem de servico. ordemServicoId={} tipoErro={}",
-                ordemServicoId,
-                ex.getClass().getSimpleName()
-        );
+        log.atError()
+                .setCause(ex)
+                .addKeyValue("event", "order_service_notification_preparation_failed")
+                .addKeyValue("orderServiceId", ordemServicoId)
+                .addKeyValue("exceptionType", ex.getClass().getSimpleName())
+                .log("Order service notification preparation failed");
+    }
+
+    private void registrarFalha(NotificacaoOrdemServico notificacao, RuntimeException ex) {
+        log.atError()
+                .setCause(ex)
+                .addKeyValue("event", "order_service_notification_send_failed")
+                .addKeyValue("orderServiceId", notificacao.ordemServicoId())
+                .addKeyValue("previousStatus", notificacao.situacaoAnterior())
+                .addKeyValue("newStatus", notificacao.novaSituacao())
+                .addKeyValue("exceptionType", ex.getClass().getSimpleName())
+                .log("Order service notification send failed");
     }
 }

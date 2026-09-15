@@ -5,6 +5,7 @@ import br.com.fiap.soat.mecanica.domain.exception.RecursoNaoEncontradoException;
 import br.com.fiap.soat.mecanica.domain.exception.RegraNegocioException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,19 @@ import static org.mockito.Mockito.when;
 class GlobalExceptionHandlerTest {
 
     private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
+
+    @Test
+    @DisplayName("Deve incluir o identificador da requisição na resposta de erro")
+    void deveIncluirErrorId() {
+        MDC.put("requestId", "request-123");
+        try {
+            ResponseEntity<ErrorResponse> response = handler.handleGeneric(new Exception("Erro inesperado"));
+
+            assertThat(response.getBody().errorId()).isEqualTo("request-123");
+        } finally {
+            MDC.remove("requestId");
+        }
+    }
 
     @Test
     @DisplayName("Deve retornar 422 para RegraNegocioException")
