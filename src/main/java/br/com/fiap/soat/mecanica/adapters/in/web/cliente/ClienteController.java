@@ -26,6 +26,15 @@ public class ClienteController {
     private final BuscarClientePorCpfUseCase buscarClientePorCpfUseCase;
     private final BuscarClientePorCnpjUseCase buscarClientePorCnpjUseCase;
     private final BuscarClientePorUsuarioIdUseCase buscarClientePorUsuarioIdUseCase;
+    private final BuscarClienteAutenticadoUseCase buscarClienteAutenticadoUseCase;
+
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('CLIENTE')")
+    @Operation(summary = "Buscar os dados do cliente autenticado pelo token do Auth")
+    public ResponseEntity<ClienteResponse> buscarAutenticado() {
+        Cliente cliente = buscarClienteAutenticadoUseCase.executar();
+        return ResponseEntity.ok(ClienteResponseMapper.toResponse(cliente));
+    }
 
     @PostMapping
     @PreAuthorize("hasRole('ATENDENTE')")
