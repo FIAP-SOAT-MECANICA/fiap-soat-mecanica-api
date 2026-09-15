@@ -40,6 +40,10 @@ spec:
         secretKeyRef:
           name: otel-datadog-secret
           key: DD_API_KEY
+    - name: K8S_NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
 
   config:
     connectors:
@@ -76,6 +80,34 @@ spec:
           network: {}
           processes: {}
 
+      # Coleta consumo de CPU e memoria dos nos, pods e containers pelo kubelet.
+      kubelet_stats:
+        collection_interval: 10s
+        auth_type: serviceAccount
+        endpoint: https://$${env:K8S_NODE_NAME}:10250
+        node: $${env:K8S_NODE_NAME}
+        insecure_skip_verify: true # Necessario para o certificado do kubelet no Kind local.
+        metric_groups: [node, pod, container]
+        extra_metadata_labels:
+          - container.id
+        metrics:
+          k8s.container.cpu_request_utilization:
+            enabled: true
+          k8s.container.cpu_limit_utilization:
+            enabled: true
+          k8s.container.memory_request_utilization:
+            enabled: true
+          k8s.container.memory_limit_utilization:
+            enabled: true
+          k8s.pod.cpu_request_utilization:
+            enabled: true
+          k8s.pod.cpu_limit_utilization:
+            enabled: true
+          k8s.pod.memory_request_utilization:
+            enabled: true
+          k8s.pod.memory_limit_utilization:
+            enabled: true
+
     processors:
       resource:
         attributes:
@@ -83,8 +115,11 @@ spec:
             value: "prd" # Coloque o mesmo ambiente da sua API
             action: insert
           - key: k8s.cluster.name
-            value: "oficina-cluster" # Nome do seu cluster Kubernetes
+            value: "${cluster_name}"
             action: insert
+          - key: host.name
+            value: $${env:K8S_NODE_NAME}
+            action: upsert
       memory_limiter:
         check_interval: 1s
         limit_percentage: 75
@@ -96,6 +131,15 @@ spec:
         
       # Vincula as métricas do nó e da app de forma unificada no Datadog
       k8sattributes:
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.uid
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.ip
+          - sources:
+              - from: connection
         extract:
           metadata:
             - k8s.pod.name
@@ -103,6 +147,16 @@ spec:
             - k8s.deployment.name
             - k8s.namespace.name
             - k8s.node.name
+          labels:
+            - tag_name: deployment.environment
+              key: tags.datadoghq.com/env
+              from: pod
+            - tag_name: service.name
+              key: tags.datadoghq.com/service
+              from: pod
+            - tag_name: service.version
+              key: tags.datadoghq.com/version
+              from: pod
         passthrough: false
 
       # Adiciona metadados do host para correlacionar APM e Infraestrutura no Datadog
@@ -125,8 +179,8 @@ spec:
           exporters: [datadog/connector, datadog/exporter]
         metrics:
           # ADICIONADO: O pipeline de métricas agora recebe tanto os dados do Java (otlp) quanto os do Host (hostmetrics)
-          receivers: [datadog/connector, otlp, hostmetrics]
-          processors: [memory_limiter, resourcedetection, resource, k8sattributes, batch]
+          receivers: [datadog/connector, otlp, hostmetrics, kubelet_stats]
+          processors: [memory_limiter, k8sattributes, resourcedetection, resource, batch]
           exporters: [datadog/exporter]
         logs:
           receivers: [otlp]

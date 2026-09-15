@@ -27,6 +27,7 @@ data "kubectl_path_documents" "manifests" {
   vars = {
     api_image     = var.api_image
     api_node_port = tostring(var.api_node_port)
+    cluster_name  = var.cluster_name
     db_name       = var.db_name
     db_username   = var.db_username
     namespace     = var.namespace

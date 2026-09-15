@@ -22,6 +22,12 @@ rules:
       - get
       - list
       - watch
+  - apiGroups: [""]
+    resources:
+      - nodes/stats
+      - nodes/pods
+    verbs:
+      - get
   - apiGroups: ["apps"]
     resources:
       - replicasets
