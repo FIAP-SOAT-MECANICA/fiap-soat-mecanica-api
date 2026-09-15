@@ -1,6 +1,7 @@
 package br.com.fiap.soat.mecanica.adapters.in.web.security;
 
 import br.com.fiap.soat.mecanica.adapters.out.security.JwtService;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -11,6 +12,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -65,22 +67,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private void autenticarUsuarioInterno(String token) {
-        String username = jwtService.extractUsername(token);
+        try {
+            String username = jwtService.extractUsername(token);
 
-        if (username != null) {
-            UserDetails user = userDetailsService.loadUserByUsername(username);
+            if (username != null) {
+                UserDetails user = userDetailsService.loadUserByUsername(username);
 
-            if (jwtService.isTokenValid(token, user)) {
+                if (jwtService.isTokenValid(token, user)) {
 
-                UsernamePasswordAuthenticationToken authToken =
-                        new UsernamePasswordAuthenticationToken(
-                                user,
-                                null,
-                                user.getAuthorities()
-                        );
+                    UsernamePasswordAuthenticationToken authToken =
+                            new UsernamePasswordAuthenticationToken(
+                                    user,
+                                    null,
+                                    user.getAuthorities()
+                            );
 
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
             }
+        } catch (JwtException | UsernameNotFoundException e) {
+            // Token invalido (assinatura, expiracao, formato) ou usuario inexistente:
+            // segue sem autenticar. O filtro de autorizacao decide 401/403 adiante.
         }
     }
 }

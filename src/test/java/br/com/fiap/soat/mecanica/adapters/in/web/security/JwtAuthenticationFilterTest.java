@@ -1,6 +1,7 @@
 package br.com.fiap.soat.mecanica.adapters.in.web.security;
 
 import br.com.fiap.soat.mecanica.adapters.out.security.JwtService;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -127,6 +128,22 @@ class JwtAuthenticationFilterTest {
 
         // Assert
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("Deve seguir sem autenticar quando token e invalido (assinatura, formato ou expirado)")
+    void deveSeguir_quandoTokenInvalido() throws Exception {
+        // Arrange
+        when(request.getHeader("Authorization")).thenReturn("Bearer tampered-token");
+        when(jwtService.extractClienteId("tampered-token")).thenReturn(Optional.empty());
+        when(jwtService.extractUsername("tampered-token")).thenThrow(new JwtException("assinatura invalida"));
+
+        // Act
+        filter.doFilterInternal(request, response, filterChain);
+
+        // Assert
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
         verify(filterChain).doFilter(request, response);
     }
 }
