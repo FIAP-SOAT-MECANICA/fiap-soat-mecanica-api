@@ -27,7 +27,9 @@ O sistema foi idealizado para resolver dores comuns de oficinas mecanicas:
 - Maven
 - Docker e Docker Compose
 - MailHog
-- Kubernetes
+- Kubernetes (AWS EKS em producao, Kind na validacao de CI)
+- Traefik (API Gateway do cluster)
+- OpenTelemetry (Operator, auto-instrumentacao Java, Collector) e Datadog (APM, metricas, logs)
 - Spring Boot Actuator
 - Swagger/OpenAPI
 - JUnit, Mockito, Testcontainers e MockMvc
@@ -287,13 +289,28 @@ retry automatico, fila, Outbox Pattern ou envio assincrono.
 
 ## Perfis de acesso
 
-A API utiliza JWT e autorizacao por cargo.
+A API utiliza JWT e autorizacao por cargo. Existem **dois tipos de token**,
+validados por chaves HMAC separadas (`JwtService`, em
+`adapters/out/security`):
+
+| Token | `sub` | Emitido por | Chave de validacao |
+| --- | --- | --- | --- |
+| Interno (funcionario) | e-mail do `Usuario` | `POST /auth/login`, nesta API | `JWT_SECRET` |
+| Cliente | UUID do `Cliente`, com `principal_type=CLIENTE` | Function serverless do repo [`fiap-soat-mecanica-api-auth`](https://github.com/FIAP-SOAT-MECANICA/fiap-soat-mecanica-api-auth) (`POST /auth/cpf`) | `AUTH_JWT_SECRET`, lida do Secrets Manager do repo `-auth` no deploy |
+
+O `JwtAuthenticationFilter` tenta validar o token como cliente primeiro
+(conferindo assinatura, `iss`, `aud` e `principal_type`); se nao bater, cai no
+fluxo interno de sempre. Chaves separadas por dominio evitam que a API tenha
+capacidade tecnica de forjar tokens de cliente (HS256 e simetrico: quem
+verifica tambem consegue assinar) e permitem rotacionar cada uma
+independentemente.
 
 | Cargo | Responsabilidades principais |
 | --- | --- |
 | `ATENDENTE` | Cadastro e consulta de clientes e veiculos |
 | `MECANICO` | Cadastro de servicos, ordens de servico, prestacoes e fluxo da OS |
 | `ALMOXARIFE` | Cadastro de pecas e alocacao de pecas em prestacoes |
+| `CLIENTE` | `GET /clientes/me` — consulta os proprios dados, autenticado com o token da Auth serverless |
 
 Rotas publicas:
 
@@ -700,14 +717,43 @@ requests para `main` e `develop`. A pipeline executa:
 - `./mvnw clean verify` (build, testes e verificacao de cobertura JaCoCo minima de 80%)
 - Analise SonarQube quando `SONAR_TOKEN` e `SONAR_HOST_URL` estiverem configurados
 
-Depois de uma CI bem-sucedida em `main`, o CD usa exatamente o
-`workflow_run.head_sha`: publica `ghcr.io/<owner>/<repo>:<sha>`, executa
-`terraform fmt/init/validate/plan/apply`, valida banco, API, metrics-server,
-HPA e smoke test, e finalmente executa `terraform destroy` com `always()`.
+### Entrega Continua (CD)
 
-Configure os GitHub Secrets `DB_PASSWORD` e `JWT_SECRET`. O pacote Container
-no GHCR deve ter visibilidade publica; isso e verificado por um pull anonimo
-antes do provisionamento. O token JWT deve ser fornecido em Base64.
+Depois de uma CI bem-sucedida em `main`, o `cd.yml` publica uma imagem imutavel
+(`ghcr.io/<owner>/<repo>:<sha>`, tag sempre em minusculas) e dispara **duas
+entregas em paralelo**, a partir da mesma imagem:
+
+| Job | O que valida/entrega |
+| --- | --- |
+| `deploy` | Cluster **Kind efemero** criado pela pipeline (Terraform + `infra/`). Sobe banco, API, metrics-server, HPA, Collector/Instrumentation do OpenTelemetry, roda o smoke test e sempre destroi tudo ao final (`terraform destroy` com `always()`). E o gate de qualidade do PR/merge, nao e ambiente real. |
+| `deploy-eks` | Deploy de verdade no cluster **EKS real** (repo [`fiap-soat-mecanica-api-k8s`](https://github.com/FIAP-SOAT-MECANICA/fiap-soat-mecanica-api-k8s)), usando o RDS do repo [`fiap-soat-mecanica-api-db`](https://github.com/FIAP-SOAT-MECANICA/fiap-soat-mecanica-api-db). Fica no ar (nao e destruido). |
+
+O `deploy-eks` busca a senha do banco e a chave JWT compartilhada com a Auth
+serverless direto do **AWS Secrets Manager** em tempo de execucao — nenhuma
+credencial de banco fica hardcoded ou em GitHub Secrets. Ele tambem:
+
+- aplica o `Ingress` que expoe a API atras do gateway **Traefik** (instalado
+  no cluster pelo repo `-k8s`);
+- aplica o RBAC, o secret do Datadog e os CRDs `OpenTelemetryCollector`/
+  `Instrumentation` **antes** do Deployment da API, para o
+  **OpenTelemetry Operator** (tambem instalado pelo repo `-k8s`) injetar o
+  agente Java automaticamente no pod;
+- valida que o agente foi injetado, faz health check via `port-forward` e
+  confirma o roteamento passando pelo gateway.
+
+O pacote Container no GHCR deve ter visibilidade publica; isso e verificado
+por um pull anonimo antes de cada deploy.
+
+#### Secrets e variables necessarios
+
+| Nome | Tipo | Usado por | Observacao |
+| --- | --- | --- | --- |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` | Secret (organizacao) | `deploy-eks` | Credenciais temporarias do AWS Academy Learner Lab, expiram a cada ~4h |
+| `JWT_SECRET` | Secret (repo) | `deploy`, `deploy-eks` | Chave HS256 em Base64 dos tokens internos (`MECANICO`/`ATENDENTE`/`ALMOXARIFE`) |
+| `DATADOG_API_KEY` | Secret (repo) | `deploy`, `deploy-eks` | API key do Datadog usada pelo OpenTelemetry Collector |
+| `DB_PASSWORD` | Secret (repo) | `deploy` (Kind) | Nao usado pelo `deploy-eks`, que le a senha do RDS direto do Secrets Manager |
+| `CLUSTER_NAME`, `DB_SECRET_NAME` | Variable (organizacao) | `deploy-eks` | Nome do cluster EKS e do secret do RDS no Secrets Manager (contrato com os repos `-k8s`/`-db`) |
+| `NAMESPACE`, `API_NODE_PORT`, `TRAEFIK_NAMESPACE`, `OTEL_OPERATOR_NAMESPACE`, `AUTH_JWT_SECRET_NAME` | Variable (repo, opcionais) | `deploy-eks` | Todas tem um valor padrao sensato no workflow; so precisam ser criadas se for necessario um valor diferente |
 
 ## Padroes utilizados
 
