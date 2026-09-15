@@ -29,7 +29,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException ex) {
-        log.error("Erro: ", ex);
+        log.debug("request_constraint_violation violations={}", ex.getConstraintViolations().size());
         List<String> detalhes = ex.getConstraintViolations().stream()
                 .map(v -> v.getPropertyPath() + ": " + v.getMessage())
                 .toList();
@@ -40,7 +40,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
-        log.error("Erro: ", ex);
+        log.debug("request_validation_failed fieldErrorCount={}", ex.getBindingResult().getFieldErrorCount());
         List<String> detalhes = ex.getBindingResult()
                 .getFieldErrors()
                 .stream()
@@ -61,7 +61,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleJsonError(HttpMessageNotReadableException ex) {
-        log.error("Erro: ", ex);
+        log.debug("request_body_not_readable exceptionType={}", ex.getClass().getSimpleName());
         Throwable cause = ex.getCause();
 
         if (cause instanceof InvalidFormatException ife) {
@@ -106,7 +106,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(RecursoNaoEncontradoException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(RecursoNaoEncontradoException ex) {
-        log.error("Erro: ", ex);
+        log.info("resource_not_found message={}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
                 new ErrorResponse(
                         404,
@@ -121,7 +121,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(SenhaInvalidaException.class)
     public ResponseEntity<ErrorResponse> handleSenhaInvalida(SenhaInvalidaException ex) {
-        log.error("Erro: ", ex);
+        log.warn("authentication_failed reason={}", ex.getClass().getSimpleName());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
                 new ErrorResponse(
                         401,
@@ -136,7 +136,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(RegraNegocioException.class)
     public ResponseEntity<ErrorResponse> handleRegraNegocio(RegraNegocioException ex) {
-        log.error("Erro: ", ex);
+        log.info("business_rule_rejected message={}", ex.getMessage());
         return ResponseEntity.status(422).body(
                 new ErrorResponse(
                         422,
@@ -151,7 +151,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex) {
-        log.error("Erro: ", ex);
+        log.warn("data_integrity_violation exceptionType={}", ex.getClass().getSimpleName());
         return ResponseEntity.badRequest().body(
                 new ErrorResponse(
                         400,
@@ -166,7 +166,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex) {
-        log.error("Erro: ", ex);
+        log.debug("illegal_argument exceptionType={}", ex.getClass().getSimpleName());
         return ResponseEntity.badRequest().body(
                 new ErrorResponse(
                         400,
@@ -181,7 +181,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
-        log.warn("Parametro invalido: {}={}", ex.getName(), ex.getValue());
+        log.debug("request_parameter_type_mismatch parameter={}", ex.getName());
         return ResponseEntity.badRequest().body(
                 new ErrorResponse(
                         400,
@@ -196,7 +196,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
-        log.warn("Metodo HTTP nao suportado: {}", ex.getMethod());
+        log.info("http_method_not_supported method={}", ex.getMethod());
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(
                 new ErrorResponse(
                         405,
@@ -211,7 +211,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException ex) {
-        log.warn("Recurso inexistente: {}", ex.getResourcePath());
+        log.debug("http_resource_not_found path={}", ex.getResourcePath());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
                 new ErrorResponse(
                         404,
@@ -226,7 +226,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
-        log.error("Erro: ", ex);
+        log.error("unexpected_error", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                 new ErrorResponse(
                         500,
@@ -243,8 +243,8 @@ public class GlobalExceptionHandler {
             AccessDeniedException.class,
             AuthorizationDeniedException.class
     })
-    public ResponseEntity<ErrorResponse> handleAuthorizationDenied(AuthorizationDeniedException ex) {
-        log.error("Erro: ", ex);
+    public ResponseEntity<ErrorResponse> handleAuthorizationDenied(Exception ex) {
+        log.warn("authorization_denied exceptionType={}", ex.getClass().getSimpleName());
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
                 new ErrorResponse(
                         403,

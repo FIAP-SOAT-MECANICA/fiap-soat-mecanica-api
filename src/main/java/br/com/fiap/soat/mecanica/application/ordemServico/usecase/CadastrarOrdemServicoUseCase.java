@@ -11,6 +11,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.UUID;
 
+import static br.com.fiap.soat.mecanica.config.observability.BusinessEventLogger.ordemServicoCriada;
+
 @Service
 @RequiredArgsConstructor
 public class CadastrarOrdemServicoUseCase {
@@ -27,6 +29,8 @@ public class CadastrarOrdemServicoUseCase {
         }
 
         OrdemServico os = new OrdemServico(observacao, veiculoId, usuario.getId());
-        return repository.salvar(os);
+        OrdemServico ordemServicoSalva = repository.salvar(os);
+        ordemServicoCriada(ordemServicoSalva.getId(), veiculoId, usuario.getId());
+        return ordemServicoSalva;
     }
 }
