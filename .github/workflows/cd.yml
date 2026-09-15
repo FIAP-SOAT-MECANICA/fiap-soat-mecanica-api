@@ -229,6 +229,7 @@ jobs:
       API_IMAGE: ${{ needs.image.outputs.image }}
       API_NODE_PORT: ${{ vars.API_NODE_PORT || '30080' }}
       TRAEFIK_NAMESPACE: ${{ vars.TRAEFIK_NAMESPACE || 'traefik' }}
+      OTEL_OPERATOR_NAMESPACE: ${{ vars.OTEL_OPERATOR_NAMESPACE || 'opentelemetry-system' }}
 
     steps:
       - name: Checkout the tested commit
@@ -250,6 +251,7 @@ jobs:
         shell: bash
         run: |
           test -n "${{ secrets.JWT_SECRET }}" || { echo "Missing repository secret JWT_SECRET"; exit 1; }
+          test -n "${{ secrets.DATADOG_API_KEY }}" || { echo "Missing repository secret DATADOG_API_KEY"; exit 1; }
 
       - name: Verify that the GHCR image is public
         shell: bash
@@ -270,6 +272,31 @@ jobs:
 
       - name: Apply namespace
         run: namespace="$NAMESPACE" envsubst < k8s/namespace.yaml | kubectl apply -f -
+
+      - name: Wait for the OpenTelemetry Operator (installed by the -k8s repo)
+        run: |
+          kubectl wait --namespace "$OTEL_OPERATOR_NAMESPACE" --for=condition=Available deployment \
+            --selector=app.kubernetes.io/name=opentelemetry-operator --timeout=180s
+          kubectl wait --for=condition=Established crd/opentelemetrycollectors.opentelemetry.io --timeout=60s
+          kubectl wait --for=condition=Established crd/instrumentations.opentelemetry.io --timeout=60s
+
+      - name: Apply OpenTelemetry collector RBAC
+        run: namespace="$NAMESPACE" envsubst < k8s/otel-rbac.yaml | kubectl apply -f -
+
+      - name: Apply Datadog secret
+        env:
+          DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
+        run: |
+          kubectl create secret generic otel-datadog-secret \
+            --namespace "$NAMESPACE" \
+            --from-literal=DD_API_KEY="$DATADOG_API_KEY" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply OpenTelemetry collector and instrumentation
+        run: |
+          namespace="$NAMESPACE" cluster_name="$CLUSTER_NAME" envsubst < k8s/collector.yaml | kubectl apply -f -
+          kubectl rollout status daemonset/otel-daemonset-collector --namespace "$NAMESPACE" --timeout=180s
+          namespace="$NAMESPACE" envsubst < k8s/instrumentation.yaml | kubectl apply -f -
 
       - name: Read RDS credentials from Secrets Manager
         id: db
@@ -347,6 +374,15 @@ jobs:
         run: |
           kubectl rollout status deployment/mecanica-api --namespace "$NAMESPACE" --timeout=300s
 
+      - name: Verify OpenTelemetry Java agent was injected
+        shell: bash
+        run: |
+          injected_agent="$(
+            kubectl get pods --namespace "$NAMESPACE" --selector app=mecanica-api \
+              --output jsonpath='{.items[0].spec.initContainers[*].name}'
+          )"
+          grep -q "opentelemetry-auto-instrumentation-java" <<< "$injected_agent"
+
       - name: Health check via port-forward
         shell: bash
         run: |
@@ -388,4 +424,7 @@ jobs:
             echo ""
             echo "Pelo gateway: http://localhost:8080/swagger-ui.html"
             echo "Direto: http://localhost:8081/swagger-ui.html"
+            echo ""
+            echo "Observabilidade: traces, metricas (app + infra dos nodes) e logs no Datadog."
+            echo "Agente Java injetado automaticamente pelo OpenTelemetry Operator."
           } >> "$GITHUB_STEP_SUMMARY"
