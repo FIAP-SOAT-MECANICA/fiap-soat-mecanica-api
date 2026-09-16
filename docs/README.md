@@ -40,12 +40,24 @@ Material das fases anteriores, mantido como referência:
 | [`1-ddd/`](1-ddd/) | Linguagem ubíqua, link do board de Domain Storytelling e Event Storming no Miro, link do modelo de tabelas no Figma e o fluxo AS IS de granularidade grossa (`.egn`) |
 | [`2-testes vulnerabilidades/`](2-testes%20vulnerabilidades/) | Relatório JaCoCo (PDF), visão geral do SonarQube (imagem) e relatório ZAP by Checkmarx de 2026-05-07 (HTML) |
 
-## Diagrama do componente
+## Diagramas da solução
 
-O diagrama de implantação está na seção
+Documentação arquitetural transversal, exigida pelo edital: visão de nuvem
+completa (API Gateway, Auth, EKS, banco, observabilidade) e os fluxos de
+autenticação e de abertura de ordem de serviço atravessando os 4
+repositórios. Publicada aqui, no repositório da aplicação, para servir de
+ponto único de acesso ao professor.
+
+| Diagrama | Conteúdo |
+| --- | --- |
+| [Componentes](diagramas/componentes.md) | Visão da nuvem: API Gateway, Lambda de autenticação, EKS (Traefik, OpenTelemetry Operator, API), RDS, Secrets Manager e Datadog |
+| [Sequência — Autenticação](diagramas/sequencia-autenticacao.md) | Cliente obtém um JWT pelo CPF e o usa em uma rota protegida |
+| [Sequência — Abertura de Ordem de Serviço](diagramas/sequencia-abertura-os.md) | Mecânico abre uma OS; transição de situação; notificação e aprovação do cliente |
+
+O diagrama de implantação específico deste repositório está na seção
 [Infraestrutura local com Terraform e Kind](../README.md#infraestrutura-local-com-terraform-e-kind)
-do README principal; a topologia em nuvem (EKS + Traefik + RDS + Auth) está
-descrita na [RFC-001](rfc/RFC-001-api-eks-learner-lab.md).
+do README principal; a topologia em nuvem detalhada está na
+[RFC-001](rfc/RFC-001-api-eks-learner-lab.md).
 
 ## Convenções
 
