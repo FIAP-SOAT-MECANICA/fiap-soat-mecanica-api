@@ -709,6 +709,26 @@ Configure os GitHub Secrets `DB_PASSWORD` e `JWT_SECRET`. O pacote Container
 no GHCR deve ter visibilidade publica; isso e verificado por um pull anonimo
 antes do provisionamento. O token JWT deve ser fornecido em Base64.
 
+## Documentacao
+
+As decisoes deste repositorio estao em [`docs/`](docs/README.md):
+
+- [RFC-001](docs/rfc/RFC-001-api-eks-learner-lab.md) — implantacao da API no EKS do AWS Academy Learner Lab: restricoes, contrato com os demais repositorios, alternativas, custo, validacao e riscos
+- [ADR-001](docs/adr/ADR-001-clean-architecture-hexagonal.md) — Clean Architecture com portas e adaptadores
+- [ADR-002](docs/adr/ADR-002-flyway-dono-do-schema.md) — Flyway como unico dono do schema; Hibernate em `validate`
+- [ADR-003](docs/adr/ADR-003-jwt-dois-emissores.md) — JWT com dois emissores: usuarios internos e clientes da Auth serverless
+- [ADR-004](docs/adr/ADR-004-notificacao-email-pos-commit.md) — notificacao por e-mail via porta de saida, apos o commit, sem retry
+- [ADR-005](docs/adr/ADR-005-imagem-imutavel-ghcr.md) — imagem multi-stage nao-root no GHCR com tag igual ao SHA testado
+- [ADR-006](docs/adr/ADR-006-kind-terraform-ambiente-efemero.md) — Kind + Terraform como ambiente efemero de validacao
+- [ADR-007](docs/adr/ADR-007-deploy-eks-kubectl-secrets-manager.md) — deploy no EKS por `kubectl apply` com segredos do Secrets Manager
+- [ADR-008](docs/adr/ADR-008-ingress-traefik.md) — `Ingress` para o Traefik declarado neste repositorio
+- [ADR-009](docs/adr/ADR-009-otel-collector-instrumentation-datadog.md) — OpenTelemetry Collector e Instrumentation exportando para o Datadog
+- [ADR-010](docs/adr/ADR-010-logs-estruturados-request-id.md) — logs estruturados em JSON com `requestId` e eventos de negocio
+- [ADR-011](docs/adr/ADR-011-qualidade-cobertura-sonar-zap.md) — portoes de qualidade: JaCoCo 80%, Testcontainers, SonarQube, ZAP e smoke test
+
+A documentacao de dominio (linguagem ubiqua, board DDD, modelo de tabelas) e
+as evidencias de testes e vulnerabilidades continuam em `docs/`.
+
 ## Padroes utilizados
 
 - Clean Architecture
