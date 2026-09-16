@@ -30,6 +30,13 @@ causa da aplicação.
 | [ADR-010](adr/ADR-010-logs-estruturados-request-id.md) | Logs JSON (logstash) com `requestId` propagado por `X-Request-Id`, eventos de negócio nomeados e `errorId` na resposta de erro; nenhum segredo ou dado pessoal em log |
 | [ADR-011](adr/ADR-011-qualidade-cobertura-sonar-zap.md) | Portões de qualidade: JaCoCo ≥ 80% no `verify`, Testcontainers com PostgreSQL real, SonarQube na CI, ZAP dinâmico e smoke test funcional |
 
+## Diagramas de sequência
+
+| Documento | Fluxo |
+| --- | --- |
+| [sequencia-autenticacao.md](diagramas/sequencia-autenticacao.md) | Token de cliente por CPF (API Gateway → Lambda → Secrets Manager → RDS), login interno por e-mail/senha e validação do Bearer com dois emissores em cada requisição |
+| [sequencia-abertura-ordem-servico.md](diagramas/sequencia-abertura-ordem-servico.md) | `POST /ordem-servicos/abrir` (OS, prestações, alocações e baixa de estoque em uma transação, notificação após o commit) e o ciclo de orçamento (envio, aprovação e recusa pelo cliente) |
+
 ## Documentação de domínio e evidências
 
 Material das fases anteriores, mantido como referência:
