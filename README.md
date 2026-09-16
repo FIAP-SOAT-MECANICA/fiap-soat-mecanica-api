@@ -726,6 +726,11 @@ As decisoes deste repositorio estao em [`docs/`](docs/README.md):
 - [ADR-010](docs/adr/ADR-010-logs-estruturados-request-id.md) — logs estruturados em JSON com `requestId` e eventos de negocio
 - [ADR-011](docs/adr/ADR-011-qualidade-cobertura-sonar-zap.md) — portoes de qualidade: JaCoCo 80%, Testcontainers, SonarQube, ZAP e smoke test
 
+Diagramas de sequencia dos fluxos que cruzam os quatro repositorios:
+
+- [Autenticacao](docs/diagramas/sequencia-autenticacao.md) — token de cliente por CPF (Auth serverless), login interno e validacao do Bearer
+- [Abertura de ordem de servico](docs/diagramas/sequencia-abertura-ordem-servico.md) — abertura consolidada e ciclo de orcamento
+
 A documentacao de dominio (linguagem ubiqua, board DDD, modelo de tabelas) e
 as evidencias de testes e vulnerabilidades continuam em `docs/`.
 
